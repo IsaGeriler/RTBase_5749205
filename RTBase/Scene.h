@@ -42,7 +42,17 @@ public:
 	// Add code here
 	Ray generateRay(float x, float y)
 	{
-		Vec3 dir(0, 0, 1);
+		// Assume x and y are in range of [0, W] and [0, H]
+		float xc = (2.f * x / width) - 1.f;
+		float yc = (2.f * (1.f - (y / height))) - 1.f;
+
+		// NDC to Clip Space to Homogenous to Camera Space
+		Vec3 p_clip = Vec3(xc, yc, 0.f, 1.f);
+		Vec3 d_camera = inverseProjectionMatrix.mulPointAndPerspectiveDivide(p_clip);
+
+		// Camera Space to World Space
+		Vec3 dir = camera.mulVec(d_camera);
+		dir = dir.normalize();
 		return Ray(origin, dir);
 	}
 	bool projectOntoCamera(const Vec3& p, float& x, float& y)
@@ -98,7 +108,8 @@ public:
 			float t;
 			float u;
 			float v;
-			if (triangles[i].rayIntersect(ray, t, u, v))
+			// if (triangles[i].rayIntersect(ray, t, u, v))
+			if (triangles[i].rayIntersectMollerTrumbore(ray, t, u, v))
 			{
 				if (t < intersection.t)
 				{

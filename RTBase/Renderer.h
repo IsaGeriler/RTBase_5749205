@@ -8,8 +8,28 @@
 #include "Lights.h"
 #include "Scene.h"
 #include "GamesEngineeringBase.h"
+
+#include <atomic>
+#include <mutex>
+#include <vector>
 #include <thread>
 #include <functional>
+
+constexpr bool enable_mt = true;
+
+struct ScreenTile {
+	unsigned int tile_x{ 0 }, tile_y{ 0 };
+	unsigned int tile_size{ 32 };
+	std::atomic<bool> is_tile_rendered = false;
+
+	// Get start index of x and y
+	unsigned int tile_x_start() const { return std::max(static_cast<unsigned int>(0), tile_x); }
+	unsigned int tile_y_start() const { return std::max(static_cast<unsigned int>(0), tile_y); }
+
+	// Get end index of x and y
+	unsigned int tile_x_end(Film* film) const { return std::min(tile_x + tile_size - 1, film->width - 1); }
+	unsigned int tile_y_end(Film* film) const { return std::min(tile_y + tile_size - 1, film->height - 1); }
+};
 
 class RayTracer
 {
@@ -81,9 +101,9 @@ public:
 		}
 		return Colour(0.0f, 0.0f, 0.0f);
 	}
-	void render()
+	// Sequential vs Multithreaded Render
+	void renderSequential(Film* film)
 	{
-		film->incrementSPP();
 		for (unsigned int y = 0; y < film->height; y++)
 		{
 			for (unsigned int x = 0; x < film->width; x++)
@@ -100,6 +120,70 @@ public:
 				canvas->draw(x, y, r, g, b);
 			}
 		}
+	}
+	void renderMultithread(Film* film)
+	{
+		std::mutex mtx;
+		std::vector<std::thread> thread_pool;
+		std::atomic<int> atomic_id_counter = 0;
+		thread_pool.reserve(numProcs);
+
+		unsigned int tile_size = 32;
+		unsigned int tile_count = static_cast<unsigned int>(std::ceil(film->width / tile_size) * std::ceil(film->height / tile_size));
+
+		for (unsigned int i = 0; i < numProcs; ++i) {
+			thread_pool.emplace_back([&]() {
+				// Work function
+				ScreenTile screen_tile;
+				unsigned int tile_id = 0;
+
+				while ((tile_id = atomic_id_counter.fetch_add(1)) < tile_count) {
+					// Initialize ScreenTile structure's attributes
+					{
+						std::lock_guard<std::mutex> lock(mtx);
+						screen_tile.tile_x = (tile_id % (unsigned int)std::ceil(film->width / tile_size)) * tile_size;
+						screen_tile.tile_y = (tile_id / (unsigned int)std::ceil(film->width / tile_size)) * tile_size;
+						screen_tile.tile_size = tile_size;
+						screen_tile.is_tile_rendered = false;
+					}
+
+					if (!screen_tile.is_tile_rendered.load(std::memory_order_relaxed))
+					{
+						for (unsigned int y = screen_tile.tile_y_start(); y < screen_tile.tile_y_end(film); ++y)
+						{
+							for (unsigned int x = screen_tile.tile_x_start(); x < screen_tile.tile_x_end(film); ++x)
+							{
+								float px = x + 0.5f;
+								float py = y + 0.5f;
+								Ray ray = scene->camera.generateRay(px, py);
+								Colour col = viewNormals(ray);
+								//Colour col = albedo(ray);
+								film->splat(px, py, col);
+								unsigned char r = (unsigned char)(col.r * 255);
+								unsigned char g = (unsigned char)(col.g * 255);
+								unsigned char b = (unsigned char)(col.b * 255);
+								canvas->draw(x, y, r, g, b);
+							}
+						}
+
+						// Tile rendered, update is_tile_rendered flag
+						{
+							std::lock_guard<std::mutex> lock(mtx);
+							screen_tile.is_tile_rendered.store(true);
+						}
+					}
+				}
+			});
+		}
+
+		// Join the threads to ensure work completed
+		for (auto& thread : thread_pool)
+			thread.join();
+	}
+	void render()
+	{
+		film->incrementSPP();
+		enable_mt ? renderMultithread(film) : renderSequential(film);
 	}
 	int getSPP()
 	{
