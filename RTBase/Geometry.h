@@ -214,10 +214,19 @@ public:
 		float c = Dot(l, l) - (radius * radius);
 		float dis = b * b - c;  // a = 1
 
+		// No solutions
 		if (dis < 0.f) return false;
-		// t = -b + sqrtf(dis) or -b - sqrtf(dis)
+
+		// One real solution
 		if (dis == 0.f) t = -b;
-		if (dis > 0.f) t = std::min(-b + sqrtf(dis), -b - sqrtf(dis));
+
+		// Two real solution
+		if (dis > 0.f) {
+			float root1 = -b - sqrtf(dis);
+			float root2 = -b + sqrtf(dis);
+			t = root1 > 0.f && root2 > 0.f ? std::min(root1, root2) :
+				(root1 > 0.f ? root1 : root2);
+		}
 		return true;
 	}
 };

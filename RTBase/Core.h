@@ -565,3 +565,9 @@ T& use()
 	static T t;
 	return t;
 }
+
+template<typename T>
+T clamp(T val, T min, T max)
+{
+	return std::max(std::min(max, val), min);
+}

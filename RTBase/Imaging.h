@@ -152,6 +152,16 @@ public:
 	}
 };
 
+class GaussianFilter : public ImageFilter {
+public:
+	// TO:DO
+};
+
+class MitchellNetravali : public ImageFilter {
+public:
+	// TO:DO
+};
+
 class Film
 {
 public:
@@ -163,10 +173,59 @@ public:
 	void splat(const float x, const float y, const Colour& L)
 	{
 		// Code to splat a smaple with colour L into the image plane using an ImageFilter
+		float filterWeights[25];   // Storage to cache weights
+		unsigned int indices[25];  // Store indices to minimize computations
+		unsigned int used = 0;
+		float total = 0;
+		int size = filter->size();
+		for (int i = -size; i <= size; i++) {
+			for (int j = -size; j <= size; j++) {
+				int px = (int)x + j;
+				int py = (int)y + i;
+				if (px >= 0 && px < width && py >= 0 && py < height) {
+					indices[used] = (py * width) + px;
+					filterWeights[used] = filter->filter(px - x, py - y);
+					total += filterWeights[used];
+					used++;
+				}
+			}
+		}
+		for (int i = 0; i < used; i++) {
+			film[indices[i]] = film[indices[i]] + (L * filterWeights[i] / total);
+		}
 	}
 	void tonemap(int x, int y, unsigned char& r, unsigned char& g, unsigned char& b, float exposure = 1.0f)
 	{
 		// Return a tonemapped pixel at coordinates x, y
+		// Filmic Tone Mapping -> Lout = (C(Lin) / C(W))^(1 / gamma)
+		// where -> C(x) = ((x (Ax + CB) + DE) / (x (Ax + B) + DF)) - (E/F)
+		// A = 0.15, B = 0.5, C = 0.1, D = 0.2, E = 0.02, F = 0.3, W = 11.2
+
+		Colour c = Colour(r, g, b);
+		
+		// Define the variables 
+		const float gamma = 2.2f;
+		const float A = 0.15f, B = 0.5f, C = 0.1f, D = 0.2f, E = 0.02f, F = 0.3f, W = 11.2f;
+
+		// Formulate Filmic Tone Mapping (Uncharted, Hable)
+		float cr = ((c.r * (A * c.r + C * B) + D * E) / (c.r * (A * c.r + B) + D * F)) - (E / F);
+		float cg = ((c.g * (A * c.g + C * B) + D * E) / (c.g * (A * c.g + B) + D * F)) - (E / F);
+		float cb = ((c.b * (A * c.b + C * B) + D * E) / (c.b * (A * film->b + B) + D * F)) - (E / F);
+		float cw = ((W * (A * W + C * B) + D * E) / (W * (A * W + B) + D * F)) - (E / F);
+
+		// Set output colour to the film
+		float lout_r = std::powf((cr / cw), 1.f / gamma);
+		float lout_g = std::powf((cg / cw), 1.f / gamma);
+		float lout_b = std::powf((cb / cw), 1.f / gamma);
+
+		// Clamp output colour values
+		lout_r = clamp(lout_r, 0.f, 255.f);
+		lout_g = clamp(lout_g, 0.f, 255.f);
+		lout_b = clamp(lout_b, 0.f, 255.f);
+
+		film[y * width + x].r = lout_r;
+		film[y * width + x].g = lout_g;
+		film[y * width + x].b = lout_b;
 	}
 	// Do not change any code below this line
 	void init(int _width, int _height, ImageFilter* _filter)
