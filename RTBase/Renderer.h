@@ -27,8 +27,8 @@ struct ScreenTile {
 	unsigned int tile_y_start() const { return std::max(static_cast<unsigned int>(0), tile_y); }
 
 	// Get end index of x and y
-	unsigned int tile_x_end(Film* film) const { return std::min(tile_x + tile_size - 1, film->width - 1); }
-	unsigned int tile_y_end(Film* film) const { return std::min(tile_y + tile_size - 1, film->height - 1); }
+	unsigned int tile_x_end(Film* film) const { return std::min(tile_x + tile_size - 2, film->width - 1); }
+	unsigned int tile_y_end(Film* film) const { return std::min(tile_y + tile_size - 2, film->height - 1); }
 };
 
 class RayTracer
@@ -117,7 +117,10 @@ public:
 				unsigned char r = (unsigned char)(col.r * 255);
 				unsigned char g = (unsigned char)(col.g * 255);
 				unsigned char b = (unsigned char)(col.b * 255);
-				film->tonemap(x, y, r, g, b);
+				// Select a Tonemap Operator to Apply:
+				// 1 - Linear without gamma, 2 - Linear with gamma, 3 - Linear with gamma and exposure
+				// 4 - Reinhard Global, 5 - Filmic (Uncharted, Hable)
+				film->tonemap(x, y, r, g, b, 5);
 				canvas->draw(x, y, r, g, b);
 			}
 		}
@@ -150,9 +153,9 @@ public:
 
 					if (!screen_tile.is_tile_rendered.load(std::memory_order_relaxed))
 					{
-						for (unsigned int y = screen_tile.tile_y_start(); y < screen_tile.tile_y_end(film); ++y)
+						for (unsigned int y = screen_tile.tile_y_start(); y <= screen_tile.tile_y_end(film); ++y)
 						{
-							for (unsigned int x = screen_tile.tile_x_start(); x < screen_tile.tile_x_end(film); ++x)
+							for (unsigned int x = screen_tile.tile_x_start(); x <= screen_tile.tile_x_end(film); ++x)
 							{
 								float px = x + 0.5f;
 								float py = y + 0.5f;
@@ -163,7 +166,10 @@ public:
 								unsigned char r = (unsigned char)(col.r * 255);
 								unsigned char g = (unsigned char)(col.g * 255);
 								unsigned char b = (unsigned char)(col.b * 255);
-								film->tonemap(x, y, r, g, b);
+								// Select a Tonemap Operator to Apply:
+								// 1 - Linear without gamma, 2 - Linear with gamma, 3 - Linear with gamma and exposure
+								// 4 - Reinhard Global, 5 - Filmic (Uncharted, Hable)
+								film->tonemap(x, y, r, g, b, 5);
 								canvas->draw(x, y, r, g, b);
 							}
 						}

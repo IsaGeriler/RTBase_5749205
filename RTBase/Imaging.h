@@ -194,38 +194,118 @@ public:
 			film[indices[i]] = film[indices[i]] + (L * filterWeights[i] / total);
 		}
 	}
-	void tonemap(int x, int y, unsigned char& r, unsigned char& g, unsigned char& b, float exposure = 1.0f)
+	// Implement different tone mapping algorithms for comparisons
+	// Tonemap: Linear Tonemap with/without gamma
+	void tonemap_linear(int x, int y, unsigned char& r, unsigned char& g, unsigned char& b, bool use_gamma = false)
 	{
-		// Return a tonemapped pixel at coordinates x, y
-		// Filmic Tone Mapping -> Lout = (C(Lin) / C(W))^(1 / gamma)
-		// where -> C(x) = ((x (Ax + CB) + DE) / (x (Ax + B) + DF)) - (E/F)
+		unsigned int index = (y * width) + x;
+		film[index].r = (float)(r / 255.f);
+		film[index].g = (float)(g / 255.f);
+		film[index].b = (float)(b / 255.f);
+
+		// Determine output colour depending on use_gamma flag, where if true, take the power
+		// or the input colour over white colour (max) with 1 / gamma --> gamma = 2.2
+		Colour Lmax(255.f, 255.f, 255.f);
+		float lout_r = use_gamma ? (std::powf((film[index].r / Lmax.r), (1.f / 2.2f))) : (film[index].r / Lmax.r);
+		float lout_g = use_gamma ? (std::powf((film[index].g / Lmax.g), (1.f / 2.2f))) : (film[index].g / Lmax.g);
+		float lout_b = use_gamma ? (std::powf((film[index].b / Lmax.b), (1.f / 2.2f))) : (film[index].b / Lmax.b);
+
+		film[index].r = lout_r;
+		film[index].g = lout_g;
+		film[index].b = lout_b;
+
+		r = (unsigned char)(film[index].r * 255.f);
+		g = (unsigned char)(film[index].g * 255.f);
+		b = (unsigned char)(film[index].b * 255.f);
+	}
+	// Tonemap: Linear Tonemap with Gamma and Exposure
+	void tonemap_linear_gamma_exposure(int x, int y, unsigned char& r, unsigned char& g, unsigned char& b, float exposure = 1.f)
+	{
+		unsigned int index = (y * width) + x;
+		film[index].r = (float)(r / 255.f);
+		film[index].g = (float)(g / 255.f);
+		film[index].b = (float)(b / 255.f);
+
+		float lout_r = std::powf((film[index].r * std::powf(2, exposure)), (1.f / 2.2f));
+		float lout_g = std::powf((film[index].g * std::powf(2, exposure)), (1.f / 2.2f));
+		float lout_b = std::powf((film[index].b * std::powf(2, exposure)), (1.f / 2.2f));
+
+		film[index].r = lout_r;
+		film[index].g = lout_g;
+		film[index].b = lout_b;
+
+		r = (unsigned char)(film[index].r * 255.f);
+		g = (unsigned char)(film[index].g * 255.f);
+		b = (unsigned char)(film[index].b * 255.f);
+	}
+	// Tonemap: Reinhard Global
+	void tonemap_reinhard_global(int x, int y, unsigned char& r, unsigned char& g, unsigned char& b)
+	{
+		unsigned int index = (y * width) + x;
+		film[index].r = (float)(r / 255.f);
+		film[index].g = (float)(g / 255.f);
+		film[index].b = (float)(b / 255.f);
+
+		// Effectively a sigmoid function with a gamma correction
+		// L(out) = (L(in) / 1 + L(in))^(1 / gamma) --> gamma = 2.2
+		float lout_r = std::powf((film[index].r / (1.f + film[index].r)), (1.f / 2.2f));
+		float lout_g = std::powf((film[index].g / (1.f + film[index].g)), (1.f / 2.2f));
+		float lout_b = std::powf((film[index].b / (1.f + film[index].b)), (1.f / 2.2f));
+
+		film[index].r = lout_r;
+		film[index].g = lout_g;
+		film[index].b = lout_b;
+
+		r = (unsigned char)(film[index].r * 255.f);
+		g = (unsigned char)(film[index].g * 255.f);
+		b = (unsigned char)(film[index].b * 255.f);
+	}
+	// Tonemap: Filmic (Uncharted 2, John Hable)
+	void tonemap_uncharted_hable(int x, int y, unsigned char& r, unsigned char& g, unsigned char& b)
+	{	
+		unsigned int index = (y * width) + x;
+		film[index].r = (float)(r / 255.f);
+		film[index].g = (float)(g / 255.f);
+		film[index].b = (float)(b / 255.f);
+
+		// L(out) = [C(Lin) / C(W)]^(1 / gamma) --> gamma = 2.2
+		// where, C(x) = ((x (Ax + CB) + DE) / (x (Ax + B) + DF)) - (E/F)
 		// A = 0.15, B = 0.5, C = 0.1, D = 0.2, E = 0.02, F = 0.3, W = 11.2
 
-		Colour c = Colour(r, g, b);
-		
 		// Define the variables 
-		const float gamma = 2.2f;
 		const float A = 0.15f, B = 0.5f, C = 0.1f, D = 0.2f, E = 0.02f, F = 0.3f, W = 11.2f;
 
 		// Formulate Filmic Tone Mapping (Uncharted, Hable)
-		float cr = ((c.r * (A * c.r + C * B) + D * E) / (c.r * (A * c.r + B) + D * F)) - (E / F);
-		float cg = ((c.g * (A * c.g + C * B) + D * E) / (c.g * (A * c.g + B) + D * F)) - (E / F);
-		float cb = ((c.b * (A * c.b + C * B) + D * E) / (c.b * (A * film->b + B) + D * F)) - (E / F);
+		float cr = ((film[index].r * (A * film[index].r + C * B) + D * E) / (film[index].r * (A * film[index].r + B) + D * F)) - (E / F);
+		float cg = ((film[index].g * (A * film[index].g + C * B) + D * E) / (film[index].g * (A * film[index].g + B) + D * F)) - (E / F);
+		float cb = ((film[index].b * (A * film[index].b + C * B) + D * E) / (film[index].b * (A * film[index].b + B) + D * F)) - (E / F);
 		float cw = ((W * (A * W + C * B) + D * E) / (W * (A * W + B) + D * F)) - (E / F);
 
 		// Set output colour to the film
-		float lout_r = std::powf((cr / cw), 1.f / gamma);
-		float lout_g = std::powf((cg / cw), 1.f / gamma);
-		float lout_b = std::powf((cb / cw), 1.f / gamma);
+		float lout_r = std::powf((cr / cw), (1.f / 2.2f));
+		float lout_g = std::powf((cg / cw), (1.f / 2.2f));
+		float lout_b = std::powf((cb / cw), (1.f / 2.2f));
 
-		// Clamp output colour values
-		lout_r = clamp(lout_r, 0.f, 255.f);
-		lout_g = clamp(lout_g, 0.f, 255.f);
-		lout_b = clamp(lout_b, 0.f, 255.f);
+		film[index].r = lout_r;
+		film[index].g = lout_g;
+		film[index].b = lout_b;
 
-		film[y * width + x].r = lout_r;
-		film[y * width + x].g = lout_g;
-		film[y * width + x].b = lout_b;
+		r = (unsigned char)(film[index].r * 255.f);
+		g = (unsigned char)(film[index].g * 255.f);
+		b = (unsigned char)(film[index].b * 255.f);
+	}
+	void tonemap(int x, int y, unsigned char& r, unsigned char& g, unsigned char& b, int tonemap_operator)
+	{
+		// Return a tonemapped pixel at coordinates x, y
+		switch (tonemap_operator)
+		{
+			case 1: { tonemap_linear(x, y, r, g, b); break; }					   // Linear without gamma
+			case 2: { tonemap_linear(x, y, r, g, b, true); break; }				   // Linear with gamma
+			case 3: { tonemap_linear_gamma_exposure(x, y, r, g, b, 0.f); break; }  // Linear with gamma and exposure
+			case 4: { tonemap_reinhard_global(x, y, r, g, b); break; }			   // Reinhard Global
+			case 5: { tonemap_uncharted_hable(x, y, r, g, b); break; }			   // Filmic (Uncharted, Hable)
+			default: tonemap_linear(x, y, r, g, b, false);
+		}
 	}
 	// Do not change any code below this line
 	void init(int _width, int _height, ImageFilter* _filter)
