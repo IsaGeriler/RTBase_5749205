@@ -166,9 +166,12 @@ public:
 								unsigned char r = (unsigned char)(col.r * 255);
 								unsigned char g = (unsigned char)(col.g * 255);
 								unsigned char b = (unsigned char)(col.b * 255);
+
 								// Select a Tonemap Operator to Apply:
-								// 1 - Linear without gamma, 2 - Linear with gamma, 3 - Linear with gamma and exposure
-								// 4 - Reinhard Global, 5 - Filmic (Uncharted, Hable)
+								// 1 - Linear without gamma, 2 - Linear with gamma, 
+								// 3 - Linear with gamma and exposure, 4 - Reinhard Global,
+								// 5 - Filmic (Uncharted, Hable), 6 - ACES Filmic Curve,
+								// 7 - Jim Hejl and Richard Burgess-Dawson
 								film->tonemap(x, y, r, g, b, 5);
 								canvas->draw(x, y, r, g, b);
 							}
