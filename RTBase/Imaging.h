@@ -140,7 +140,7 @@ class BoxFilter : public ImageFilter
 public:
 	float filter(float x, float y) const
 	{
-		if (fabsf(x) < 0.5f && fabs(y) < 0.5f)
+		if (fabsf(x) <= 0.5f && fabs(y) <= 0.5f)
 		{
 			return 1.0f;
 		}
@@ -152,14 +152,95 @@ public:
 	}
 };
 
-class GaussianFilter : public ImageFilter {
+// Adapted from: https://www.pbr-book.org/4ed/Sampling_and_Reconstruction/Image_Reconstruction#fragment-FilterInterface-1
+class TriangleFilter : public ImageFilter {
 public:
 	// TO:DO
+	float filter(float x, float y) const
+	{
+		return std::fmaxf(0, x - std::fabsf(x)) * std::fmaxf(0, y - std::fabsf(y));
+	}
+	int size() const
+	{
+		return 0;
+	}
 };
 
-class MitchellNetravali : public ImageFilter {
+inline float Gaussian(float d, float radius, float alpha)
+{
+	// alpha: smoothness, related with the filter size passed as parameter
+	return std::powf(2.7182817f, -1 * (alpha * d * d)) - std::powf(2.7182817f, -1 * (alpha * radius * radius));
+}
+
+class GaussianFilter : public ImageFilter
+{
+	// TO:DO - FIX THE FILTER - THE MORE RADIUS IS INCREASED THE PROGRAM BECOMES MORE UNSTABLE...
 public:
-	// TO:DO
+	float filter(float x, float y) const
+	{
+		return Gaussian(x, 2.f, 1.f) * Gaussian(y, 2.f, 1.f);
+	}
+	int size() const
+	{
+		return 2.f;
+	}
+};
+
+inline float MitchellNetravali(float d, float B, float C)
+{
+	// Separable equation for Mitchell-Netravali Filter
+	if (d >= 0 && d < 1)
+	{
+		return (1.f / 6.f) * ((12 - 9 * B - 6 * C) * std::powf(std::fabsf(d), 3) + (-18 + 12 * B + 6 * C) * std::powf(std::fabsf(d), 2) + (6 - 2 * B));
+	}
+	else if (d >= 1 && d < 2)
+	{
+		return (1.f / 6.f) * ((-B - 6 * C) * std::powf(std::fabsf(d), 3) + (6 * B + 30 * C) * std::powf(std::fabsf(d), 2) + (-12 * B - 48 * C) * std::fabsf(d) + (8 * B + 24 * C));
+	}
+	else if (d >= 2)
+	{
+		return 0;
+	}
+}
+
+class MitchellNetravaliFilter : public ImageFilter
+{
+private:
+	 const float radius = 2.f;  // Radius is fixed at 2 for Mitchell-Netravali Filter
+	 float B = 1.f / 3.f;
+	 float C = 1.f / 3.f;
+public:
+	float filter(float x, float y) const
+	{
+		return MitchellNetravali(2.f * x / radius, B, C) * MitchellNetravali(2.f * y / radius, B, C);
+	}
+	int size() const
+	{
+		return 0;
+	}
+};
+
+// Adapted from: https://www.pbr-book.org/4ed/Sampling_and_Reconstruction/Image_Reconstruction#fragment-FilterInterface-1
+inline float windowedSinc(float d, float radius, float tau)
+{
+	// sinc(x) = sin(x) / x
+	if (std::fabsf(d) > radius) return 0;
+	return (sinf(M_PI * d) / (M_PI * d)) * (sinf(M_PI * d / tau) / (M_PI * d / tau));
+}
+
+class LanczosSincFilter : public ImageFilter {
+private:
+	float radius, tau;
+public:
+	LanczosSincFilter(float _radius, float _tau) : radius(_radius), tau(_tau) {}
+	float filter(float x, float y) const
+	{
+		return windowedSinc(x, radius, tau) * windowedSinc(y, radius, tau);
+	}
+	int size() const
+	{
+		return 0;
+	}
 };
 
 class Film
@@ -205,19 +286,19 @@ public:
 		film[index].b = (float)(b / 255.f);
 
 		// Max colour
-		Colour max(255.f, 255.f, 255.f);
+		Colour max(255.f / 2.f, 255.f / 2.f, 255.f / 2.f);
 
 		// Gamma (change between 1.4, 1.8, 2.2, 2.6)
-		const float gamma = 2.2f;
+		const float gamma = 2.4f;
 
 		// Get output components
-		float L_out_r = use_gamma ? std::powf((film[index].r / max.r), (1.f / gamma)) : (film[index].r / max.r);
-		float L_out_g = use_gamma ? std::powf((film[index].g / max.g), (1.f / gamma)) : (film[index].g / max.g);
-		float L_out_b = use_gamma ? std::powf((film[index].b / max.b), (1.f / gamma)) : (film[index].b / max.b);
+		float L_out_r = film[index].r / max.r;
+		float L_out_g = film[index].g / max.g;
+		float L_out_b = film[index].b / max.b;
 		
-		film[index].r = L_out_r;
-		film[index].g = L_out_g;
-		film[index].b = L_out_b;
+		film[index].r = use_gamma ? std::powf(L_out_r, 1.f / gamma) : L_out_r;
+		film[index].g = use_gamma ? std::powf(L_out_g, 1.f / gamma) : L_out_g;
+		film[index].b = use_gamma ? std::powf(L_out_b, 1.f / gamma) : L_out_b;
 
 		r = (unsigned char)(film[index].r * 255.f);
 		g = (unsigned char)(film[index].g * 255.f);
@@ -233,16 +314,17 @@ public:
 		film[index].b = (float)(b / 255.f);
 
 		// Gamma (change between 1.4, 1.8, 2.2, 2.6)
-		const float gamma = 2.2f;
+		const float gamma = 2.4f;
 
 		// Get output components
-		float L_out_r = std::powf((film[index].r * std::powf(2, exposure)), (1.f / gamma));
-		float L_out_g = std::powf((film[index].g * std::powf(2, exposure)), (1.f / gamma));
-		float L_out_b = std::powf((film[index].b * std::powf(2, exposure)), (1.f / gamma));
+		float L_out_r = film[index].r * std::powf(2, exposure);
+		float L_out_g = film[index].g * std::powf(2, exposure);
+		float L_out_b = film[index].b * std::powf(2, exposure);
 
-		film[index].r = L_out_r;
-		film[index].g = L_out_g;
-		film[index].b = L_out_b;
+		// Set Gamma corrected output colour to the film
+		film[index].r = std::powf(L_out_r, 1.f / gamma);
+		film[index].g = std::powf(L_out_g, 1.f / gamma);
+		film[index].b = std::powf(L_out_b, 1.f / gamma);
 
 		r = (unsigned char)(film[index].r * 255.f);
 		g = (unsigned char)(film[index].g * 255.f);
@@ -257,24 +339,31 @@ public:
 		film[index].b = (float)(b / 255.f);
 
 		// Gamma (change between 1.4, 1.8, 2.2, 2.6)
-		const float gamma = 2.2f;
+		const float gamma = 2.4f;
 
 		// Get output components
 		// Lout = (Lin / 1 + Lin)^(1 / gamma)
 		// This is effectively a sigmoid function with a gamma correction
-		float L_out_r = std::powf(film[index].r / (1.f + film[index].r), (1.f / gamma));
-		float L_out_g = std::powf(film[index].g / (1.f + film[index].g), (1.f / gamma));
-		float L_out_b = std::powf(film[index].b / (1.f + film[index].b), (1.f / gamma));
+		float L_out_r = film[index].r / (1.f + film[index].r);
+		float L_out_g = film[index].g / (1.f + film[index].g);
+		float L_out_b = film[index].b / (1.f + film[index].b);
 
-		film[index].r = L_out_r;
-		film[index].g = L_out_g;
-		film[index].b = L_out_b;
+		// Set Gamma corrected output colour to the film
+		film[index].r = std::powf(L_out_r, 1.f / gamma);
+		film[index].g = std::powf(L_out_g, 1.f / gamma);
+		film[index].b = std::powf(L_out_b, 1.f / gamma);
 
 		r = (unsigned char)(film[index].r * 255.f);
 		g = (unsigned char)(film[index].g * 255.f);
 		b = (unsigned char)(film[index].b * 255.f);
 	}
 	// Tonemap: Filmic (Uncharted 2, John Hable)
+	float uncharted_hable_formula(float x)
+	{
+		// A = 0.15, B = 0.5, C = 0.1, D = 0.2, E = 0.02, F = 0.3
+		// C(x) = ((x (Ax + CB) + DE) / (x (Ax + B) + DF)) - (E/F)
+		return ((x * (0.15f * x + 0.1f * 0.5f) + 0.2f * 0.02f) / (x * (0.15 * x + 0.5f) + 0.2f * 0.3f)) - (0.02f / 0.3f);
+	}
 	void tonemap_uncharted_hable(int x, int y, unsigned char& r, unsigned char& g, unsigned char& b)
 	{
 		// Input colour
@@ -283,30 +372,26 @@ public:
 		film[index].g = (float)(g / 255.f);
 		film[index].b = (float)(b / 255.f);
 
-		// Lout = [C(Lin) / C(W)]^(1 / gamma)
-		// where, C(x) = ((x (Ax + CB) + DE) / (x (Ax + B) + DF)) - (E/F) -- x is an arbitrary variable
-		// A = 0.15, B = 0.5, C = 0.1, D = 0.2, E = 0.02, F = 0.3, W = 11.2
-
-		// Define the variables 
-		const float A = 0.15f, B = 0.5f, C = 0.1f, D = 0.2f, E = 0.02f, F = 0.3f, W = 11.2f;
-
 		// Gamma (change between 1.4, 1.8, 2.2, 2.6)
-		const float gamma = 2.2f;
+		const float gamma = 2.4f;
 
 		// Formulate Filmic Tone Mapping (Uncharted 2, Hable)
-		float c_Lin_r = ((film[index].r * (A * film[index].r + C * B) + D * E) / (film[index].r * (A * film[index].r + B) + D * F)) - (E / F);
-		float c_Lin_g = ((film[index].g * (A * film[index].g + C * B) + D * E) / (film[index].g * (A * film[index].g + B) + D * F)) - (E / F);
-		float c_Lin_b = ((film[index].b * (A * film[index].b + C * B) + D * E) / (film[index].b * (A * film[index].b + B) + D * F)) - (E / F);
-		float c_W = ((W * (A * W + C * B) + D * E) / (W * (A * W + B) + D * F)) - (E / F);
+		float c_Lin_r = uncharted_hable_formula(film[index].r);
+		float c_Lin_g = uncharted_hable_formula(film[index].g);
+		float c_Lin_b = uncharted_hable_formula(film[index].b);
+		float inv_c_W = 1.f / uncharted_hable_formula(11.2f);  // W = 11.2
 
 		// Set Gamma corrected output colour to the film
-		float L_out_r = std::powf((c_Lin_r / c_W), (1.f / gamma));
-		float L_out_g = std::powf((c_Lin_g / c_W), (1.f / gamma));
-		float L_out_b = std::powf((c_Lin_b / c_W), (1.f / gamma));
+		// Lout = [C(Lin) / C(W)]^(1 / gamma)
+		float L_out_r = c_Lin_r * inv_c_W;
+		float L_out_g = c_Lin_g * inv_c_W;
+		float L_out_b = c_Lin_b * inv_c_W;
 
 		film[index].r = L_out_r;
 		film[index].g = L_out_g;
 		film[index].b = L_out_b;
+
+		film[index].applyGammaCorrection(gamma);
 
 		r = (unsigned char)(film[index].r * 255.f);
 		g = (unsigned char)(film[index].g * 255.f);
@@ -314,6 +399,13 @@ public:
 	}
 	// Tonemap: ACES Filmic Curve
 	// Adapted from: https://knarkowicz.wordpress.com/2016/01/06/aces-filmic-tone-mapping-curve/
+	float aces_filmic_curve_formula(float x)
+	{
+		// A = 2.51, B = 0.03, C = 2.43, D = 0.59, E = 0.14
+		// Lout = saturate((x * 0.6f * (a * x * 0.6f + b)) / (x * 0.6f * (c * x * 0.6f + d) + e))
+		// Note: Multiplied the input components with 0.6f for the original ACES Filmic Curve
+		return clamp((x * 0.6f * (2.51f * x * 0.6f + 0.03f) / (x * 0.6f * (2.43f * x * 0.6f + 0.14f))), 0.f, 255.f);
+	}
 	void tonemap_aces_filmic_curve(int x, int y, unsigned char& r, unsigned char& g, unsigned char& b)
 	{
 		// Input colour
@@ -325,15 +417,21 @@ public:
 		// Define the variables 
 		const float A = 2.51f, B = 0.03f, C = 2.43f, D = 0.59f, E = 0.14f;
 
-		// Get output components (No need for gamma correction for this)
-		// Lout = saturate((x * (a * x + b)) / (x * (c * x + d) + e))
-		float L_out_r = clamp((film[index].r * (A * film[index].r + B) / (film[index].r * (C * film[index].r + E))), 0.f, 255.f);
-		float L_out_g = clamp((film[index].g * (A * film[index].g + B) / (film[index].g * (C * film[index].g + E))), 0.f, 255.f);
-		float L_out_b = clamp((film[index].b * (A * film[index].b + B) / (film[index].b * (C * film[index].b + E))), 0.f, 255.f);
+		// Gamma - 2.4 works best for ACES Filmic Curve
+		const float gamma = 2.4f;
 
+		// Get output components
+		// Lout = saturate((x * 0.6f * (a * x * 0.6f + b)) / (x * 0.6f * (c * x * 0.6f + d) + e))
+		// Note: Multiplied the input components with 0.6f for the original ACES Filmic Curve
+		float L_out_r = aces_filmic_curve_formula(film[index].r);
+		float L_out_g = aces_filmic_curve_formula(film[index].g);
+		float L_out_b = aces_filmic_curve_formula(film[index].b);
+
+		// Set Gamma corrected output colour to the film
 		film[index].r = L_out_r;
 		film[index].g = L_out_g;
 		film[index].b = L_out_b;
+		film[index].applyGammaCorrection(gamma);
 
 		r = (unsigned char)(film[index].r * 255.f);
 		g = (unsigned char)(film[index].g * 255.f);
@@ -349,7 +447,7 @@ public:
 		film[index].g = (float)(g / 255.f);
 		film[index].b = (float)(b / 255.f);
 
-		// Get output components (No need for gamma correction for this)
+		// Get output components - No need for gamma correction for this
 		// Lout = (C(x) * (6.2 * C(x) + 0.5)) / (C(x) * (6.2 * C(x) + 1.7) + 0.06)
 		// where, C(x) = max(0, Lin - 0.004)
 		float c_r = std::fmaxf(0.f, film[index].r - 0.004f);
@@ -377,10 +475,10 @@ public:
 			case 2: { tonemap_linear(x, y, r, g, b, true); break; }						// Linear with gamma
 			case 3: { tonemap_linear_gamma_exposure(x, y, r, g, b, 0.f); break; }		// Linear with gamma and exposure
 			case 4: { tonemap_reinhard_global(x, y, r, g, b); break; }					// Reinhard Global
-			case 5: { tonemap_uncharted_hable(x, y, r, g, b); break; }					// Filmic (Uncharted, Hable)
+			case 5: { tonemap_uncharted_hable(x, y, r, g, b); break; }					// Filmic (Uncharted 2, Hable)
 			case 6: { tonemap_aces_filmic_curve(x, y, r, g, b); break; }				// ACES Filmic Curve
 			case 7: { tonemap_jim_hejl_richard_burgess_dawson(x, y, r, g, b); break; }  // Jim Hejl and Richard Burgess-Dawson
-			default: tonemap_linear(x, y, r, g, b, true);								// Default Tonemap Operator
+			default: tonemap_reinhard_global(x, y, r, g, b);							// Default Tonemap Operator
 		}
 	}
 	// Do not change any code below this line

@@ -90,11 +90,12 @@ public:
 	{
 		return ((0.2126f * r) + (0.7152f * g) + (0.0722f * b));
 	}
-	void gamma_correction(float gamma)
+	void applyGammaCorrection(float gamma)
 	{
-		r = gamma > 0 ? std::powf(r, 1.f / gamma) : 0.f;
-		g = gamma > 0 ? std::powf(g, 1.f / gamma) : 0.f;
-		b = gamma > 0 ? std::powf(b, 1.f / gamma) : 0.f;
+		float invGamma = 1.f / gamma;
+		r = gamma > 0 ? std::powf(r, invGamma) : 0.f;
+		g = gamma > 0 ? std::powf(g, invGamma) : 0.f;
+		b = gamma > 0 ? std::powf(b, invGamma) : 0.f;
 	}
 };
 

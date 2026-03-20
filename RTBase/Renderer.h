@@ -27,8 +27,8 @@ struct ScreenTile {
 	unsigned int tile_y_start() const { return std::max(static_cast<unsigned int>(0), tile_y); }
 
 	// Get end index of x and y
-	unsigned int tile_x_end(Film* film) const { return std::min(tile_x + tile_size - 2, film->width - 1); }
-	unsigned int tile_y_end(Film* film) const { return std::min(tile_y + tile_size - 2, film->height - 1); }
+	unsigned int tile_x_end(Film* film) const { return std::min(tile_x + tile_size - 1, film->width - 1); }
+	unsigned int tile_y_end(Film* film) const { return std::min(tile_y + tile_size - 1, film->height - 1); }
 };
 
 class RayTracer
@@ -45,7 +45,11 @@ public:
 		scene = _scene;
 		canvas = _canvas;
 		film = new Film();
-		film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
+		//film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
+		//film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new TriangleFilter());
+		//film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new GaussianFilter());
+		//film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new MitchellNetravaliFilter());
+		film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new LanczosSincFilter(3.f, 3.f));
 		SYSTEM_INFO sysInfo;
 		GetSystemInfo(&sysInfo);
 		numProcs = sysInfo.dwNumberOfProcessors;
@@ -117,9 +121,12 @@ public:
 				unsigned char r = (unsigned char)(col.r * 255);
 				unsigned char g = (unsigned char)(col.g * 255);
 				unsigned char b = (unsigned char)(col.b * 255);
+				
 				// Select a Tonemap Operator to Apply:
-				// 1 - Linear without gamma, 2 - Linear with gamma, 3 - Linear with gamma and exposure
-				// 4 - Reinhard Global, 5 - Filmic (Uncharted, Hable)
+				// 1 - Linear without gamma, 2 - Linear with gamma, 
+				// 3 - Linear with gamma and exposure, 4 - Reinhard Global,
+				// 5 - Filmic (Uncharted 2, Hable), 6 - ACES Filmic Curve,
+				// 7 - Jim Hejl and Richard Burgess-Dawson
 				film->tonemap(x, y, r, g, b, 5);
 				canvas->draw(x, y, r, g, b);
 			}
@@ -170,7 +177,7 @@ public:
 								// Select a Tonemap Operator to Apply:
 								// 1 - Linear without gamma, 2 - Linear with gamma, 
 								// 3 - Linear with gamma and exposure, 4 - Reinhard Global,
-								// 5 - Filmic (Uncharted, Hable), 6 - ACES Filmic Curve,
+								// 5 - Filmic (Uncharted 2, Hable), 6 - ACES Filmic Curve,
 								// 7 - Jim Hejl and Richard Burgess-Dawson
 								film->tonemap(x, y, r, g, b, 5);
 								canvas->draw(x, y, r, g, b);
