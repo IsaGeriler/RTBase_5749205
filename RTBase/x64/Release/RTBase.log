@@ -1,20 +1,19 @@
 ﻿  Main.cpp
-C:\dev\VisualStudio\WM9M3\RTBase\Imaging.h(266,23): warning C4018: '<': signed/unsigned mismatch
+C:\dev\VisualStudio\WM9M3\RTBase\Imaging.h(260,23): warning C4018: '<': signed/unsigned mismatch
   (compiling source file 'Main.cpp')
   
-C:\dev\VisualStudio\WM9M3\RTBase\Imaging.h(266,48): warning C4018: '<': signed/unsigned mismatch
+C:\dev\VisualStudio\WM9M3\RTBase\Imaging.h(260,48): warning C4018: '<': signed/unsigned mismatch
   (compiling source file 'Main.cpp')
   
-C:\dev\VisualStudio\WM9M3\RTBase\Imaging.h(274,21): warning C4018: '<': signed/unsigned mismatch
+C:\dev\VisualStudio\WM9M3\RTBase\Imaging.h(268,21): warning C4018: '<': signed/unsigned mismatch
   (compiling source file 'Main.cpp')
   
 C:\dev\VisualStudio\WM9M3\RTBase\Renderer.h(145,30): warning C4018: '<': signed/unsigned mismatch
   (compiling source file 'Main.cpp')
   
   Generating code
-C:\dev\VisualStudio\WM9M3\RTBase\Imaging.h(204): warning C4715: 'MitchellNetravali': not all control paths return a value
-  6 of 2038 functions ( 0.3%) were compiled, the rest were copied from previous compilation.
+  5 of 2038 functions ( 0.2%) were compiled, the rest were copied from previous compilation.
     4 functions were new in current compilation
-    19 functions had inline decision re-evaluated but remain unchanged
+    20 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   RTBase.vcxproj -> C:\dev\VisualStudio\WM9M3\x64\Release\RTBase.exe

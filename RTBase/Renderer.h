@@ -47,7 +47,7 @@ public:
 		film = new Film();
 		//film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
 		//film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new TriangleFilter());
-		//film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new GaussianFilter());
+		//film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new GaussianFilter(4.f, 0.5f));
 		//film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new MitchellNetravaliFilter());
 		film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new LanczosSincFilter(3.f, 3.f));
 		SYSTEM_INFO sysInfo;

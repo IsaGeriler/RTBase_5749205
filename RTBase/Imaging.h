@@ -134,7 +134,7 @@ public:
 	virtual float filter(const float x, const float y) const = 0;
 	virtual int size() const = 0;
 };
-
+// Box Filter
 class BoxFilter : public ImageFilter
 {
 public:
@@ -151,41 +151,36 @@ public:
 		return 0;
 	}
 };
-
+// Triangle Filter
 // Adapted from: https://www.pbr-book.org/4ed/Sampling_and_Reconstruction/Image_Reconstruction#fragment-FilterInterface-1
 class TriangleFilter : public ImageFilter {
 public:
 	// TO:DO
 	float filter(float x, float y) const
 	{
-		return std::fmaxf(0, x - std::fabsf(x)) * std::fmaxf(0, y - std::fabsf(y));
+		return std::fmaxf(0, 1.f - std::fabsf(x)) * std::fmaxf(0, 1.f - std::fabsf(y));
 	}
 	int size() const
 	{
 		return 0;
 	}
 };
-
+// Gaussian Filter
 inline float Gaussian(float d, float radius, float alpha)
 {
 	// alpha: smoothness, related with the filter size passed as parameter
-	return std::powf(2.7182817f, -1 * (alpha * d * d)) - std::powf(2.7182817f, -1 * (alpha * radius * radius));
+	return std::powf(2.7182817f, (-1 * alpha * d * d)) - std::powf(2.7182817f, (- 1 * alpha * radius * radius));
 }
-
 class GaussianFilter : public ImageFilter
 {
-	// TO:DO - FIX THE FILTER - THE MORE RADIUS IS INCREASED THE PROGRAM BECOMES MORE UNSTABLE...
+private:
+	float radius, alpha;
 public:
-	float filter(float x, float y) const
-	{
-		return Gaussian(x, 2.f, 1.f) * Gaussian(y, 2.f, 1.f);
-	}
-	int size() const
-	{
-		return 2.f;
-	}
+	GaussianFilter(float _radius, float _alpha) : radius(_radius), alpha(_alpha) {}
+	float filter(float x, float y) const { return Gaussian(x, radius, alpha) * Gaussian(y, radius, alpha); }
+	int size() const { return 0; }
 };
-
+// Mitchell-Netravali Filter
 inline float MitchellNetravali(float d, float B, float C)
 {
 	// Separable equation for Mitchell-Netravali Filter
@@ -202,7 +197,6 @@ inline float MitchellNetravali(float d, float B, float C)
 		return 0;
 	}
 }
-
 class MitchellNetravaliFilter : public ImageFilter
 {
 private:
@@ -219,7 +213,7 @@ public:
 		return 0;
 	}
 };
-
+// Windowed Sinc Filter (Lanczos Sinc Filter)
 // Adapted from: https://www.pbr-book.org/4ed/Sampling_and_Reconstruction/Image_Reconstruction#fragment-FilterInterface-1
 inline float windowedSinc(float d, float radius, float tau)
 {
@@ -358,7 +352,7 @@ public:
 		b = (unsigned char)(film[index].b * 255.f);
 	}
 	// Tonemap: Filmic (Uncharted 2, John Hable)
-	float uncharted_hable_formula(float x)
+	inline float uncharted_hable_formula(float x)
 	{
 		// A = 0.15, B = 0.5, C = 0.1, D = 0.2, E = 0.02, F = 0.3
 		// C(x) = ((x (Ax + CB) + DE) / (x (Ax + B) + DF)) - (E/F)
@@ -399,7 +393,7 @@ public:
 	}
 	// Tonemap: ACES Filmic Curve
 	// Adapted from: https://knarkowicz.wordpress.com/2016/01/06/aces-filmic-tone-mapping-curve/
-	float aces_filmic_curve_formula(float x)
+	inline float aces_filmic_curve_formula(float x)
 	{
 		// A = 2.51, B = 0.03, C = 2.43, D = 0.59, E = 0.14
 		// Lout = saturate((x * 0.6f * (a * x * 0.6f + b)) / (x * 0.6f * (c * x * 0.6f + d) + e))
