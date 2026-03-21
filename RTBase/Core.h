@@ -152,6 +152,10 @@ public:
 	{
 		return Vec3(x * v.x, y * v.y, z * v.z);
 	}
+	float& operator[](const unsigned int index)
+	{
+		return coords[index];
+	}
 	Vec3 perspectiveDivide() const
 	{
 		return Vec3(x / w, y / w, z / w, 1.0f / w);

@@ -85,7 +85,14 @@ public:
 	void build()
 	{
 		// Add BVH building code here
-		
+		//std::vector<Triangle> inputTriangles;
+		//for (int i = 0; i < triangles.size(); i++)
+		//{
+		//	inputTriangles.emplace_back(triangles[i]);
+		//}
+		//triangles.clear();
+		//bvh = new BVHNode(inputTriangles.size());
+		//bvh->build(inputTriangles, triangles);
 		// Do not touch the code below this line!
 		// Build light list
 		for (int i = 0; i < triangles.size(); i++)

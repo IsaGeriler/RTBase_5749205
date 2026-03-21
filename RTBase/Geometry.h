@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <utility>
 
 #include "Core.h"
 #include "Sampling.h"
@@ -247,13 +248,56 @@ struct IntersectionData
 
 class BVHNode
 {
+private:
+	//void updateBounds(std::vector<Triangle>& inputTriangles, unsigned int index)
+	//{
+	//	BVHNode& root = node[index];
+	//	for (unsigned int first = root.offset, i = 0; i < size; i++)
+	//	{
+	//		Triangle& leaf = inputTriangles[i + offset];
+	//		
+	//		// Update Min AABB Bounds
+	//		root.bounds.min = Min(root.bounds.min, leaf.vertices[0].p);
+	//		root.bounds.min = Min(root.bounds.min, leaf.vertices[1].p);
+	//		root.bounds.min = Min(root.bounds.min, leaf.vertices[2].p);
+
+	//		// Update Max AABB Bounds
+	//		root.bounds.max = Max(root.bounds.max, leaf.vertices[0].p);
+	//		root.bounds.max = Max(root.bounds.max, leaf.vertices[1].p);
+	//		root.bounds.max = Max(root.bounds.max, leaf.vertices[2].p);
+	//	}
+	//}
+	//void subdivide(std::vector<Triangle>& inputTriangles, unsigned int index)
+	//{
+	//	BVHNode& root = node[index];
+	//	Vec3 extend = root.bounds.max - root.bounds.min;
+	//	int axis = (extend.y > extend.x) ? ((extend.z > extend.y) ? 2 : 1) : 0;
+	//	float split = node->bounds.min[axis] + extend[axis] * 0.5f;
+
+	//	int i = root.offset;
+	//	int j = i + root.used - 1;
+
+	//	while (i <= j)
+	//	{
+	//		if (inputTriangles[i].centre()[axis] < split) i++;
+	//		else std::swap(inputTriangles[i], inputTriangles[j--]);
+	//	}
+	//}
 public:
 	AABB bounds;
 	BVHNode* r;
 	BVHNode* l;
+	//BVHNode* node;
+	//unsigned int rootIndex = 0, usedNodes = 1;
+	unsigned int size = 0;
 	// This can store an offset and number of triangles in a global triangle list for example
 	// But you can store this however you want!
-	// unsigned int offset;
+	// Primitive Options:
+	// 1 - Store offset and size in a reordered list of triangles
+	// unsigned int offset = 0;  // Offset of first primitive
+	// unsigned int used = 0;    // Size of the primitives
+	// 2 - Store primitives / pointers to primitives directly
+	// Triangle* triangles;
 	// unsigned char num;
 	BVHNode()
 	{
@@ -261,13 +305,35 @@ public:
 		l = NULL;
 	}
 	// Note there are several options for how to implement the build method. Update this as required
-	void build(std::vector<Triangle>& inputTriangles)
+	void build(std::vector<Triangle>& inputTriangles, std::vector<Triangle>& outputTriangles)
 	{
 		// Add BVH building code here
+		// 1 - Calculate bounds
+		// 2 - SAH split planes
+		// 3 - Building sub trees
 	}
 	void traverse(const Ray& ray, const std::vector<Triangle>& triangles, IntersectionData& intersection)
 	{
 		// Add BVH Traversal code here
+		// Find closest intersection along a ray
+		// Find if two points are visible
+
+		// Check bounds
+		if (!bounds.rayAABB(ray)) return;
+		// If intersects:
+		// » If not leaf, traverse children nodes
+		bool isLeaf = true;  // Temp line for now
+		if (!isLeaf) {
+			// traverse left child
+			// traverse right child
+		}
+		// » Else ray-triangle for all triangles in node
+		else {
+			for (size_t i = 0; i < triangles.size(); i++) {
+				float t, u, v;
+				triangles[i].rayIntersectMollerTrumbore(ray, t, u, v);
+			}
+		}
 	}
 	IntersectionData traverse(const Ray& ray, const std::vector<Triangle>& triangles)
 	{
@@ -279,6 +345,8 @@ public:
 	bool traverseVisible(const Ray& ray, const std::vector<Triangle>& triangles, const float maxT)
 	{
 		// Add visibility code here
+		// Similar to traverse, but return false as soon
+		// as a primitive is intersected
 		return true;
 	}
 };
