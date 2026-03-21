@@ -127,7 +127,7 @@ public:
 				// 3 - Linear with gamma and exposure, 4 - Reinhard Global,
 				// 5 - Filmic (Uncharted 2, Hable), 6 - ACES Filmic Curve,
 				// 7 - Jim Hejl and Richard Burgess-Dawson
-				film->tonemap(x, y, r, g, b, 5);
+				film->tonemap(x, y, r, g, b, 7);
 				canvas->draw(x, y, r, g, b);
 			}
 		}

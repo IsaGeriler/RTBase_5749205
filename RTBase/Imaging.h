@@ -280,19 +280,20 @@ public:
 		film[index].b = (float)(b / 255.f);
 
 		// Max colour
-		Colour max(255.f / 2.f, 255.f / 2.f, 255.f / 2.f);
+		Colour max(255.f, 255.f, 255.f);
 
-		// Gamma (change between 1.4, 1.8, 2.2, 2.6)
-		const float gamma = 2.4f;
+		// Gamma (change between 1.4, 1.8, 2.2, 2.4, 2.6)
+		float gamma = 2.2f;
 
-		// Get output components
-		float L_out_r = film[index].r / max.r;
-		float L_out_g = film[index].g / max.g;
-		float L_out_b = film[index].b / max.b;
+		// Obtain Luminance Values
+		const float Lout = use_gamma ? std::powf((film[index].Lum() / max.Lum()), (1.f / gamma)) : (film[index].Lum() / max.Lum());
+		const float Ldisp = clamp(Lout, 0.f, 255.f);
 		
-		film[index].r = use_gamma ? std::powf(L_out_r, 1.f / gamma) : L_out_r;
-		film[index].g = use_gamma ? std::powf(L_out_g, 1.f / gamma) : L_out_g;
-		film[index].b = use_gamma ? std::powf(L_out_b, 1.f / gamma) : L_out_b;
+		// Obtain the output colour
+		film[index] = film[index] * Ldisp;
+
+		// Apply Gamma Correction for Monitor Display
+		film[index].applyGammaCorrection(gamma);
 
 		r = (unsigned char)(film[index].r * 255.f);
 		g = (unsigned char)(film[index].g * 255.f);
@@ -307,18 +308,18 @@ public:
 		film[index].g = (float)(g / 255.f);
 		film[index].b = (float)(b / 255.f);
 
-		// Gamma (change between 1.4, 1.8, 2.2, 2.6)
-		const float gamma = 2.4f;
+		// Gamma (change between 1.4, 1.8, 2.2, 2.4, 2.6)
+		float gamma = 2.2f;
 
-		// Get output components
-		float L_out_r = film[index].r * std::powf(2, exposure);
-		float L_out_g = film[index].g * std::powf(2, exposure);
-		float L_out_b = film[index].b * std::powf(2, exposure);
+		// Obtain Luminance Values
+		const float Lout = std::powf(film[index].Lum() * std::powf(2, exposure), (1.f / gamma));
+		const float Ldisp = clamp(Lout, 0.f, 255.f);
 
-		// Set Gamma corrected output colour to the film
-		film[index].r = std::powf(L_out_r, 1.f / gamma);
-		film[index].g = std::powf(L_out_g, 1.f / gamma);
-		film[index].b = std::powf(L_out_b, 1.f / gamma);
+		// Obtain the output colour
+		film[index] = film[index] * Ldisp;
+
+		// Apply Gamma Correction for Monitor Display
+		film[index].applyGammaCorrection(gamma);
 
 		r = (unsigned char)(film[index].r * 255.f);
 		g = (unsigned char)(film[index].g * 255.f);
@@ -332,20 +333,20 @@ public:
 		film[index].g = (float)(g / 255.f);
 		film[index].b = (float)(b / 255.f);
 
-		// Gamma (change between 1.4, 1.8, 2.2, 2.6)
-		const float gamma = 2.4f;
+		// Gamma (change between 1.4, 1.8, 2.2, 2.4, 2.6)
+		float gamma = 2.2f;
 
-		// Get output components
+		// Obtain Luminance Values
 		// Lout = (Lin / 1 + Lin)^(1 / gamma)
 		// This is effectively a sigmoid function with a gamma correction
-		float L_out_r = film[index].r / (1.f + film[index].r);
-		float L_out_g = film[index].g / (1.f + film[index].g);
-		float L_out_b = film[index].b / (1.f + film[index].b);
+		const float Lout = std::powf((film[index].Lum() / (1.f + film[index].Lum())), (1.f / gamma));
+		const float Ldisp = clamp(Lout, 0.f, 255.f);
 
-		// Set Gamma corrected output colour to the film
-		film[index].r = std::powf(L_out_r, 1.f / gamma);
-		film[index].g = std::powf(L_out_g, 1.f / gamma);
-		film[index].b = std::powf(L_out_b, 1.f / gamma);
+		// Obtain the output colour
+		film[index] = film[index] * Ldisp;
+
+		// Apply Gamma Correction for Monitor Display
+		film[index].applyGammaCorrection(gamma);
 
 		r = (unsigned char)(film[index].r * 255.f);
 		g = (unsigned char)(film[index].g * 255.f);
@@ -366,25 +367,20 @@ public:
 		film[index].g = (float)(g / 255.f);
 		film[index].b = (float)(b / 255.f);
 
-		// Gamma (change between 1.4, 1.8, 2.2, 2.6)
-		const float gamma = 2.4f;
+		// Gamma (change between 1.4, 1.8, 2.2, 2.4, 2.6)
+		float gamma = 2.2f;
 
-		// Formulate Filmic Tone Mapping (Uncharted 2, Hable)
-		float c_Lin_r = uncharted_hable_formula(film[index].r);
-		float c_Lin_g = uncharted_hable_formula(film[index].g);
-		float c_Lin_b = uncharted_hable_formula(film[index].b);
-		float inv_c_W = 1.f / uncharted_hable_formula(11.2f);  // W = 11.2
-
-		// Set Gamma corrected output colour to the film
+		// Obtain Luminance Values
 		// Lout = [C(Lin) / C(W)]^(1 / gamma)
-		float L_out_r = c_Lin_r * inv_c_W;
-		float L_out_g = c_Lin_g * inv_c_W;
-		float L_out_b = c_Lin_b * inv_c_W;
+		const float CLin = uncharted_hable_formula(film[index].Lum());
+		const float CW = uncharted_hable_formula(11.2f);
+		const float Lout = std::powf((CLin / CW), (1.f / gamma));
+		const float Ldisp = clamp(Lout, 0.f, 255.f);
 
-		film[index].r = L_out_r;
-		film[index].g = L_out_g;
-		film[index].b = L_out_b;
+		// Obtain the output colour
+		film[index] = film[index] * Ldisp;
 
+		// Apply Gamma Correction for Monitor Display
 		film[index].applyGammaCorrection(gamma);
 
 		r = (unsigned char)(film[index].r * 255.f);
@@ -411,20 +407,17 @@ public:
 		// Define the variables 
 		const float A = 2.51f, B = 0.03f, C = 2.43f, D = 0.59f, E = 0.14f;
 
-		// Gamma - 2.4 works best for ACES Filmic Curve
-		const float gamma = 2.4f;
+		// Gamma - 2.4 works best for ACES Filmic Curve (but can change between 1.4, 1.8, 2.2, 2.4, 2.6)
+		float gamma = 2.4f;
 
-		// Get output components
-		// Lout = saturate((x * 0.6f * (a * x * 0.6f + b)) / (x * 0.6f * (c * x * 0.6f + d) + e))
-		// Note: Multiplied the input components with 0.6f for the original ACES Filmic Curve
-		float L_out_r = aces_filmic_curve_formula(film[index].r);
-		float L_out_g = aces_filmic_curve_formula(film[index].g);
-		float L_out_b = aces_filmic_curve_formula(film[index].b);
+		// Obtain Luminance Values
+		float Lout = std::powf(aces_filmic_curve_formula(film[index].Lum()), (1.f / gamma));
+		float Ldisp = clamp(Lout, 0.f, 255.f);
 
-		// Set Gamma corrected output colour to the film
-		film[index].r = L_out_r;
-		film[index].g = L_out_g;
-		film[index].b = L_out_b;
+		// Obtain the output colour
+		film[index] = film[index] * Ldisp;
+
+		// Apply Gamma Correction for Monitor Display
 		film[index].applyGammaCorrection(gamma);
 
 		r = (unsigned char)(film[index].r * 255.f);
@@ -433,6 +426,10 @@ public:
 	}
 	// Tonemap: Jim Hejl and Richard Burgess-Dawson
 	// Adapted from: http://filmicworlds.com/blog/filmic-tonemapping-operators/
+	inline float jim_hejl_richard_burgess_dawson_formula(float x)
+	{
+		return (x * (6.2f * x + 0.5f)) / (x * (6.2f * x + 1.7f) + 0.06f);
+	}
 	void tonemap_jim_hejl_richard_burgess_dawson(int x, int y, unsigned char& r, unsigned char& g, unsigned char& b)
 	{
 		// Input colour
@@ -441,20 +438,20 @@ public:
 		film[index].g = (float)(g / 255.f);
 		film[index].b = (float)(b / 255.f);
 
-		// Get output components - No need for gamma correction for this
+		// Gamma (change between 1.4, 1.8, 2.2, 2.4, 2.6)
+		float gamma = 2.2f;
+
+		// Obtain Luminance Values - No need for gamma correction for this
 		// Lout = (C(x) * (6.2 * C(x) + 0.5)) / (C(x) * (6.2 * C(x) + 1.7) + 0.06)
-		// where, C(x) = max(0, Lin - 0.004)
-		float c_r = std::fmaxf(0.f, film[index].r - 0.004f);
-		float c_g = std::fmaxf(0.f, film[index].g - 0.004f);
-		float c_b = std::fmaxf(0.f, film[index].b - 0.004f);
+		// C(x) = max(0, Lin - 0.004)
+		float Lout = jim_hejl_richard_burgess_dawson_formula(std::fmaxf(0.f, film[index].Lum() - 0.004));
+		float Ldisp = clamp(Lout, 0.f, 255.f);
 
-		float L_out_r = (c_r * (6.2f * c_r + 0.5f)) / (c_r * (6.2f * c_r + 1.7f) + 0.06f);
-		float L_out_g = (c_g * (6.2f * c_g + 0.5f)) / (c_g * (6.2f * c_g + 1.7f) + 0.06f);
-		float L_out_b = (c_b * (6.2f * c_b + 0.5f)) / (c_b * (6.2f * c_b + 1.7f) + 0.06f);
+		// Obtain the output colour
+		film[index] = film[index] * Ldisp;
 
-		film[index].r = L_out_r;
-		film[index].g = L_out_g;
-		film[index].b = L_out_b;
+		// Apply Gamma Correction for Monitor Display
+		film[index].applyGammaCorrection(gamma);
 
 		r = (unsigned char)(film[index].r * 255.f);
 		g = (unsigned char)(film[index].g * 255.f);
