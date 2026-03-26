@@ -16,7 +16,7 @@
 #include <functional>
 
 constexpr bool enable_mt = true;
-constexpr bool enable_bvh = false;
+constexpr bool enable_bvh = true;
 
 struct ScreenTile {
 	unsigned int tile_x{ 0 }, tile_y{ 0 };

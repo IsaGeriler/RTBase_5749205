@@ -250,6 +250,54 @@ struct IntersectionData {
 // https://jacco.ompf2.com/2022/04/21/how-to-build-a-bvh-part-3-quick-builds/
 // https://www.sci.utah.edu/~wald/Publications/2007/ParallelBVHBuild/fastbuild.pdf
 class BVHNode {
+private:
+	bool isLeaf() const { return l == nullptr && r == nullptr; }
+
+	void calculateBounds(std::vector<Triangle>& triangles) {
+		for (unsigned int i = 0; i < used; i++) {
+			bounds.extend(triangles[offset + i].vertices[0].p);
+			bounds.extend(triangles[offset + i].vertices[1].p);
+			bounds.extend(triangles[offset + i].vertices[2].p);
+		}
+	}
+
+	void subdivide(std::vector<Triangle>& triangles) {
+		if (used <= 2) return;
+
+		Vec3 extent = bounds.max - bounds.min;
+		unsigned int axis = 0;
+		if (extent.y > extent.x) axis = 1;
+		if (extent.z > extent[axis]) axis = 2;
+		float split = bounds.min[axis] + extent[axis] * 0.5f;
+
+		int i = offset;
+		int j = i + used - 1;
+
+		while (i <= j) {
+			if (triangles[i].centre()[axis] < split) i++;
+			else std::swap(triangles[i], triangles[j--]);
+		}
+
+		int leftCount = i - offset;
+		if (leftCount == 0 || leftCount == used) return;
+
+		l = new BVHNode();
+		r = new BVHNode();
+
+		l->offset = offset;
+		l->used = leftCount;
+
+		r->offset = i;
+		r->used = used - leftCount;
+
+		used = 0;
+
+		l->calculateBounds(triangles);
+		r->calculateBounds(triangles);
+
+		l->subdivide(triangles);
+		r->subdivide(triangles);
+	}
 public:
 	AABB bounds;
 	BVHNode* r;
@@ -258,14 +306,9 @@ public:
 	// This can store an offset and number of triangles in a global triangle list for example
 	// But you can store this however you want!
 	
-	// Primitive Options:
-	// Store offset and size in a reordered list of triangles
-	unsigned int offset;
-	unsigned char used;
-
-	// Store primitives/pointers to primitives directly
-	Triangle* triangles;
-	unsigned char num;
+	// Store offset (first triangle index) and size in a reordered list of triangles
+	unsigned int offset = 0;
+	unsigned int used = 0;
 	
 	BVHNode() {
 		r = NULL;
@@ -276,14 +319,35 @@ public:
 	void build(std::vector<Triangle>& inputTriangles, std::vector<Triangle>& outputTriangles) {
 		// Add BVH building code here
 		// Add code to calculate bounds, SAH split planes, and building sub trees
+		calculateBounds(inputTriangles);
+		subdivide(inputTriangles);
+		std::copy(inputTriangles.begin(), inputTriangles.end(), std::back_inserter(outputTriangles));
 	}
 
 	void traverse(const Ray& ray, const std::vector<Triangle>& triangles, IntersectionData& intersection) {
 		// Add BVH Traversal code here
-		// Check bounds
-		// – If intersects
-		//   - If not leaf, traverse children nodes
-		//   - Else ray-triangle for all triangles in node
+		// Check bounds for whether the ray intersects AABB
+		if (!bounds.rayAABB(ray)) return;
+		
+		if (!isLeaf()) {
+			// If not leaf, traverse children nodes
+			if (l != nullptr) l->traverse(ray, triangles, intersection);
+			if (r != nullptr) r->traverse(ray, triangles, intersection);
+		} else {
+			// Else ray-triangle for all triangles in node
+			float t, u, v;
+			for (unsigned int i = 0; i < triangles.size(); i++) {
+				if (triangles[i].rayIntersectMollerTrumbore(ray, t, u, v)) {
+					if (t < intersection.t) {
+						intersection.ID = i;
+						intersection.t = t;
+						intersection.alpha = u;
+						intersection.beta = v;
+						intersection.gamma = 1.f - u - v;
+					}
+				}
+			}
+		}
 	}
 
 	IntersectionData traverse(const Ray& ray, const std::vector<Triangle>& triangles) {
@@ -294,7 +358,22 @@ public:
 	}
 
 	bool traverseVisible(const Ray& ray, const std::vector<Triangle>& triangles, const float maxT) {
-		// Add visibility code here
-		// Similar to traverse, but return false as soon as a primitive is intersected
+		// Add visibility code here, similar to traverse, but return false as soon as a primitive is intersected
+		// Check bounds for whether the ray intersects AABB
+		float t;
+		if (!bounds.rayAABB(ray, t) || t > maxT) return true;
+
+		if (!isLeaf()) {
+			// If not leaf, traverse children nodes
+			if (l != nullptr) l->traverseVisible(ray, triangles, maxT);
+			if (r != nullptr) r->traverseVisible(ray, triangles, maxT);
+		} else {
+			// Else ray-triangle for all triangles in node
+			float t, u, v;
+			for (unsigned int i = 0; i < triangles.size(); i++) {
+				if (triangles[i].rayIntersectMollerTrumbore(ray, t, u, v)) return false;
+			}
+			return true;
+		}
 	}
 };
