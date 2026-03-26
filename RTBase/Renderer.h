@@ -16,6 +16,7 @@
 #include <functional>
 
 constexpr bool enable_mt = true;
+constexpr bool enable_bvh = false;
 
 struct ScreenTile {
 	unsigned int tile_x{ 0 }, tile_y{ 0 };
@@ -68,22 +69,44 @@ public:
 		{
 			return Colour(0.0f, 0.0f, 0.0f);
 		}
+
 		// Compute direct lighting here
-		return Colour(0.0f, 0.0f, 0.0f);
+		float pmf;
+		Light* light = scene->sampleLight(sampler, pmf);
+
+		if (light->isArea()) {
+			// Sample point on light and store returned emission
+			Colour emittedColour;
+			Vec3 sample = light->sample(shadingData, sampler, emittedColour, pmf);
+			// Evaluate Geometry Term
+			Vec3 wi = sample - shadingData.x;
+			// Evaluate Visibility
+			
+			// Evaluate BSDF
+			shadingData.bsdf->evaluate(shadingData, wi);
+			// Multiply and return
+		}
 	}
 	Colour pathTrace(Ray& r, Colour& pathThroughput, int depth, Sampler* sampler)
 	{
 		// Add pathtracer code here
 		return Colour(0.0f, 0.0f, 0.0f);
 	}
-	Colour direct(Ray& r, Sampler* sampler)
-	{
+	Colour direct(Ray& r, Sampler* sampler) {
 		// Compute direct lighting for an image sampler here
-		return Colour(0.0f, 0.0f, 0.0f);
+		IntersectionData intersection = enable_bvh ? scene->bvh_traverse(r) : scene->traverse(r);
+		ShadingData shadingData = scene->calculateShadingData(intersection, r);
+		if (shadingData.t < FLT_MAX) {
+			if (shadingData.bsdf->isLight()) {
+				return shadingData.bsdf->emit(shadingData, shadingData.wo);
+			}
+			return computeDirect(shadingData, sampler);
+		}
+		return scene->background->evaluate(r.dir);
 	}
 	Colour albedo(Ray& r)
 	{
-		IntersectionData intersection = scene->traverse(r);
+		IntersectionData intersection = enable_bvh ? scene->bvh_traverse(r) : scene->traverse(r);
 		ShadingData shadingData = scene->calculateShadingData(intersection, r);
 		if (shadingData.t < FLT_MAX)
 		{
@@ -97,7 +120,7 @@ public:
 	}
 	Colour viewNormals(Ray& r)
 	{
-		IntersectionData intersection = scene->traverse(r);
+		IntersectionData intersection = enable_bvh ? scene->bvh_traverse(r) : scene->traverse(r);
 		if (intersection.t < FLT_MAX)
 		{
 			ShadingData shadingData = scene->calculateShadingData(intersection, r);
@@ -117,6 +140,7 @@ public:
 				Ray ray = scene->camera.generateRay(px, py);
 				Colour col = viewNormals(ray);
 				//Colour col = albedo(ray);
+				//Colour col = direct(ray, samplers);
 				film->splat(px, py, col);
 				unsigned char r = (unsigned char)(col.r * 255);
 				unsigned char g = (unsigned char)(col.g * 255);
@@ -169,6 +193,7 @@ public:
 								Ray ray = scene->camera.generateRay(px, py);
 								Colour col = viewNormals(ray);
 								//Colour col = albedo(ray);
+								//Colour col = direct(ray, samplers);
 								film->splat(px, py, col);
 								unsigned char r = (unsigned char)(col.r * 255);
 								unsigned char g = (unsigned char)(col.g * 255);
@@ -179,7 +204,7 @@ public:
 								// 3 - Linear with gamma and exposure, 4 - Reinhard Global,
 								// 5 - Filmic (Uncharted 2, Hable), 6 - ACES Filmic Curve,
 								// 7 - Jim Hejl and Richard Burgess-Dawson
-								film->tonemap(x, y, r, g, b, 5);
+								film->tonemap(x, y, r, g, b, 7);
 								canvas->draw(x, y, r, g, b);
 							}
 						}

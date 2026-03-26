@@ -6,6 +6,7 @@
 #include "Imaging.h"
 #include "Materials.h"
 #include "Lights.h"
+#include <cmath>
 
 class Camera
 {
@@ -85,14 +86,6 @@ public:
 	void build()
 	{
 		// Add BVH building code here
-		//std::vector<Triangle> inputTriangles;
-		//for (int i = 0; i < triangles.size(); i++)
-		//{
-		//	inputTriangles.emplace_back(triangles[i]);
-		//}
-		//triangles.clear();
-		//bvh = new BVHNode(inputTriangles.size());
-		//bvh->build(inputTriangles, triangles);
 		// Do not touch the code below this line!
 		// Build light list
 		for (int i = 0; i < triangles.size(); i++)
@@ -115,7 +108,6 @@ public:
 			float t;
 			float u;
 			float v;
-			// if (triangles[i].rayIntersect(ray, t, u, v))
 			if (triangles[i].rayIntersectMollerTrumbore(ray, t, u, v))
 			{
 				if (t < intersection.t)
@@ -130,9 +122,15 @@ public:
 		}
 		return intersection;
 	}
+	IntersectionData bvh_traverse(const Ray& ray)
+	{
+		return bvh->traverse(ray, triangles);
+	}
 	Light* sampleLight(Sampler* sampler, float& pmf)
 	{
-		return NULL;
+		pmf = 1.f / lights.size();
+		int li = std::floor(sampler->next() * lights.size());
+		return lights[li];
 	}
 	// Do not modify any code below this line
 	void init(std::vector<Triangle> meshTriangles, std::vector<BSDF*> meshMaterials, Light* _background)

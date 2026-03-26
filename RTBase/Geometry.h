@@ -1,49 +1,44 @@
 #pragma once
 
+#include <algorithm>
 #include <cmath>
+#include <iterator>
+#include <vector>
 #include <utility>
 
 #include "Core.h"
 #include "Sampling.h"
 
-class Ray
-{
+class Ray {
 public:
 	Vec3 o;
 	Vec3 dir;
 	Vec3 invDir;
-	Ray()
-	{
-	}
-	Ray(Vec3 _o, Vec3 _d)
-	{
-		init(_o, _d);
-	}
-	void init(Vec3 _o, Vec3 _d)
-	{
+	
+	Ray() {}
+	Ray(Vec3 _o, Vec3 _d) { init(_o, _d); }
+	
+	void init(Vec3 _o, Vec3 _d) {
 		o = _o;
 		dir = _d;
 		invDir = Vec3(1.0f / dir.x, 1.0f / dir.y, 1.0f / dir.z);
 	}
-	Vec3 at(const float t) const
-	{
-		return (o + (dir * t));
-	}
+	
+	Vec3 at(const float t) const { return (o + (dir * t)); }
 };
 
-class Plane
-{
+class Plane {
 public:
 	Vec3 n;
 	float d;
-	void init(Vec3& _n, float _d)
-	{
+
+	void init(Vec3& _n, float _d) {
 		n = _n;
 		d = _d;
 	}
+
 	// Add code here
-	bool rayIntersect(Ray& r, float& t)
-	{
+	bool rayIntersect(Ray& r, float& t) {
 		t = -(Dot(n, r.o) + d) / Dot(n, r.dir);
 		return t >= 0.f;
 	}
@@ -51,35 +46,34 @@ public:
 
 #define EPSILON 1e-6
 
-class Triangle
-{
+class Triangle {
 public:
 	Vertex vertices[3];
-	Vec3 e1; // Edge 1
-	Vec3 e2; // Edge 2
-	Vec3 n; // Geometric Normal
-	float area; // Triangle area
-	float d; // For ray triangle if needed
+	Vec3 e0;	 // Edge 0
+	Vec3 e1;	 // Edge 1
+	Vec3 e2;	 // Edge 2
+	Vec3 n;		 // Geometric Normal
+	float area;  // Triangle area
+	float d;     // For ray triangle if needed
 	unsigned int materialIndex;
-	void init(Vertex v0, Vertex v1, Vertex v2, unsigned int _materialIndex)
-	{
+	
+	void init(Vertex v0, Vertex v1, Vertex v2, unsigned int _materialIndex) {
 		materialIndex = _materialIndex;
 		vertices[0] = v0;
 		vertices[1] = v1;
 		vertices[2] = v2;
+		e0 = vertices[1].p - vertices[0].p;
 		e1 = vertices[2].p - vertices[1].p;
 		e2 = vertices[0].p - vertices[2].p;
 		n = e1.cross(e2).normalize();
 		area = e1.cross(e2).length() * 0.5f;
 		d = Dot(n, vertices[0].p);
 	}
-	Vec3 centre() const
-	{
-		return (vertices[0].p + vertices[1].p + vertices[2].p) / 3.0f;
-	}
+
+	Vec3 centre() const { return (vertices[0].p + vertices[1].p + vertices[2].p) / 3.0f; }
+
 	// Add code here
-	bool rayIntersect(const Ray& r, float& t, float& u, float& v) const
-	{
+	bool rayIntersect(const Ray& r, float& t, float& u, float& v) const {
 		// Find Ray-Plane Intersaction First
 		float denominator = Dot(n, r.dir);
 		if (denominator == 0) return false;
@@ -101,8 +95,8 @@ public:
 		if (v < 0.f || v > 1.f || u + v > 1.f) return false;
 		return true;
 	}
-	bool rayIntersectMollerTrumbore(const Ray& r, float& t, float& u, float& v) const
-	{
+
+	bool rayIntersectMollerTrumbore(const Ray& r, float& t, float& u, float& v) const {
 		// Recalculate the triangle edge coordinates
 		// As Möller-Trumbore requires v (beta) and w (gamma) but we have u (alpha) and v (beta)
 		Vec3 _e1 = vertices[1].p - vertices[0].p;
@@ -125,46 +119,52 @@ public:
 		t = Dot(_e2, q) * invDet;
 		return t >= 0.f;
 	}
-	void interpolateAttributes(const float alpha, const float beta, const float gamma, Vec3& interpolatedNormal, float& interpolatedU, float& interpolatedV) const
-	{
+
+	void interpolateAttributes(const float alpha, const float beta, const float gamma, Vec3& interpolatedNormal, float& interpolatedU, float& interpolatedV) const {
 		interpolatedNormal = vertices[0].normal * alpha + vertices[1].normal * beta + vertices[2].normal * gamma;
 		interpolatedNormal = interpolatedNormal.normalize();
 		interpolatedU = vertices[0].u * alpha + vertices[1].u * beta + vertices[2].u * gamma;
 		interpolatedV = vertices[0].v * alpha + vertices[1].v * beta + vertices[2].v * gamma;
 	}
+
 	// Add code here
-	Vec3 sample(Sampler* sampler, float& pdf)
-	{
-		return Vec3(0, 0, 0);
+	Vec3 sample(Sampler* sampler, float& pdf) {
+		pdf = 1 / area;
+
+		float r1 = sampler->next();
+		float r2 = sampler->next();
+
+		float alpha = 1 - sqrtf(r1);
+		float beta = r2 * sqrtf(r1);
+		float gamma = 1 - (alpha + beta);
+
+		return vertices[0].p * alpha + vertices[1].p * beta + vertices[2].p * gamma;
 	}
-	Vec3 gNormal()
-	{
+
+	Vec3 gNormal() {
 		return (n * (Dot(vertices[0].normal, n) > 0 ? 1.0f : -1.0f));
 	}
 };
 
-class AABB
-{
+class AABB {
 public:
 	Vec3 max;
 	Vec3 min;
-	AABB()
-	{
-		reset();
-	}
-	void reset()
-	{
+
+	AABB() { reset(); }
+
+	void reset() {
 		max = Vec3(-FLT_MAX, -FLT_MAX, -FLT_MAX);
 		min = Vec3(FLT_MAX, FLT_MAX, FLT_MAX);
 	}
-	void extend(const Vec3 p)
-	{
+
+	void extend(const Vec3 p) {
 		max = Max(max, p);
 		min = Min(min, p);
 	}
+
 	// Add code here
-	bool rayAABB(const Ray& r, float& t)
-	{
+	bool rayAABB(const Ray& r, float& t) {
 		Vec3 tmin = (min - r.o) * r.invDir;
 		Vec3 tmax = (max - r.o) * r.invDir;
 
@@ -176,9 +176,9 @@ public:
 		t = std::min(t_entry, t_exit);
 		return (t_entry <= t_exit) && (t_exit > 0.f);
 	}
+
 	// Add code here
-	bool rayAABB(const Ray& r)
-	{
+	bool rayAABB(const Ray& r) {
 		Vec3 tmin = (min - r.o) * r.invDir;
 		Vec3 tmax = (max - r.o) * r.invDir;
 
@@ -189,27 +189,26 @@ public:
 		float t_exit = std::min(texit.x, std::min(texit.y, texit.z));
 		return (t_entry <= t_exit) && (t_exit > 0.f);
 	}
+
 	// Add code here
-	float area()
-	{
+	float area() {
 		Vec3 size = max - min;
 		return ((size.x * size.y) + (size.y * size.z) + (size.x * size.z)) * 2.0f;
 	}
 };
 
-class Sphere
-{
+class Sphere {
 public:
 	Vec3 centre;
 	float radius;
-	void init(Vec3& _centre, float _radius)
-	{
+
+	void init(Vec3& _centre, float _radius) {
 		centre = _centre;
 		radius = _radius;
 	}
+
 	// Add code here
-	bool rayIntersect(Ray& r, float& t)
-	{
+	bool rayIntersect(Ray& r, float& t) {
 		Vec3 l = r.o - centre;
 		float b = 2 * Dot(l, r.dir);
 		float c = Dot(l, l) - (radius * radius);
@@ -232,8 +231,7 @@ public:
 	}
 };
 
-struct IntersectionData
-{
+struct IntersectionData {
 	unsigned int ID;
 	float t;
 	float alpha;
@@ -246,107 +244,57 @@ struct IntersectionData
 #define TRIANGLE_COST 2.0f
 #define BUILD_BINS 32
 
-class BVHNode
-{
-private:
-	//void updateBounds(std::vector<Triangle>& inputTriangles, unsigned int index)
-	//{
-	//	BVHNode& root = node[index];
-	//	for (unsigned int first = root.offset, i = 0; i < size; i++)
-	//	{
-	//		Triangle& leaf = inputTriangles[i + offset];
-	//		
-	//		// Update Min AABB Bounds
-	//		root.bounds.min = Min(root.bounds.min, leaf.vertices[0].p);
-	//		root.bounds.min = Min(root.bounds.min, leaf.vertices[1].p);
-	//		root.bounds.min = Min(root.bounds.min, leaf.vertices[2].p);
-
-	//		// Update Max AABB Bounds
-	//		root.bounds.max = Max(root.bounds.max, leaf.vertices[0].p);
-	//		root.bounds.max = Max(root.bounds.max, leaf.vertices[1].p);
-	//		root.bounds.max = Max(root.bounds.max, leaf.vertices[2].p);
-	//	}
-	//}
-	//void subdivide(std::vector<Triangle>& inputTriangles, unsigned int index)
-	//{
-	//	BVHNode& root = node[index];
-	//	Vec3 extend = root.bounds.max - root.bounds.min;
-	//	int axis = (extend.y > extend.x) ? ((extend.z > extend.y) ? 2 : 1) : 0;
-	//	float split = node->bounds.min[axis] + extend[axis] * 0.5f;
-
-	//	int i = root.offset;
-	//	int j = i + root.used - 1;
-
-	//	while (i <= j)
-	//	{
-	//		if (inputTriangles[i].centre()[axis] < split) i++;
-	//		else std::swap(inputTriangles[i], inputTriangles[j--]);
-	//	}
-	//}
+// Adapted from: https://jacco.ompf2.com/2022/04/13/how-to-build-a-bvh-part-1-basics/
+// will also adapt more from:
+// https://jacco.ompf2.com/2022/04/18/how-to-build-a-bvh-part-2-faster-rays/
+// https://jacco.ompf2.com/2022/04/21/how-to-build-a-bvh-part-3-quick-builds/
+// https://www.sci.utah.edu/~wald/Publications/2007/ParallelBVHBuild/fastbuild.pdf
+class BVHNode {
 public:
 	AABB bounds;
 	BVHNode* r;
 	BVHNode* l;
-	//BVHNode* node;
-	//unsigned int rootIndex = 0, usedNodes = 1;
-	unsigned int size = 0;
+	
 	// This can store an offset and number of triangles in a global triangle list for example
 	// But you can store this however you want!
+	
 	// Primitive Options:
-	// 1 - Store offset and size in a reordered list of triangles
-	// unsigned int offset = 0;  // Offset of first primitive
-	// unsigned int used = 0;    // Size of the primitives
-	// 2 - Store primitives / pointers to primitives directly
-	// Triangle* triangles;
-	// unsigned char num;
-	BVHNode()
-	{
+	// Store offset and size in a reordered list of triangles
+	unsigned int offset;
+	unsigned char used;
+
+	// Store primitives/pointers to primitives directly
+	Triangle* triangles;
+	unsigned char num;
+	
+	BVHNode() {
 		r = NULL;
 		l = NULL;
 	}
-	// Note there are several options for how to implement the build method. Update this as required
-	void build(std::vector<Triangle>& inputTriangles, std::vector<Triangle>& outputTriangles)
-	{
-		// Add BVH building code here
-		// 1 - Calculate bounds
-		// 2 - SAH split planes
-		// 3 - Building sub trees
-	}
-	void traverse(const Ray& ray, const std::vector<Triangle>& triangles, IntersectionData& intersection)
-	{
-		// Add BVH Traversal code here
-		// Find closest intersection along a ray
-		// Find if two points are visible
 
-		// Check bounds
-		if (!bounds.rayAABB(ray)) return;
-		// If intersects:
-		// » If not leaf, traverse children nodes
-		bool isLeaf = true;  // Temp line for now
-		if (!isLeaf) {
-			// traverse left child
-			// traverse right child
-		}
-		// » Else ray-triangle for all triangles in node
-		else {
-			for (size_t i = 0; i < triangles.size(); i++) {
-				float t, u, v;
-				triangles[i].rayIntersectMollerTrumbore(ray, t, u, v);
-			}
-		}
+	// Note there are several options for how to implement the build method. Update this as required
+	void build(std::vector<Triangle>& inputTriangles, std::vector<Triangle>& outputTriangles) {
+		// Add BVH building code here
+		// Add code to calculate bounds, SAH split planes, and building sub trees
 	}
-	IntersectionData traverse(const Ray& ray, const std::vector<Triangle>& triangles)
-	{
+
+	void traverse(const Ray& ray, const std::vector<Triangle>& triangles, IntersectionData& intersection) {
+		// Add BVH Traversal code here
+		// Check bounds
+		// – If intersects
+		//   - If not leaf, traverse children nodes
+		//   - Else ray-triangle for all triangles in node
+	}
+
+	IntersectionData traverse(const Ray& ray, const std::vector<Triangle>& triangles) {
 		IntersectionData intersection;
 		intersection.t = FLT_MAX;
 		traverse(ray, triangles, intersection);
 		return intersection;
 	}
-	bool traverseVisible(const Ray& ray, const std::vector<Triangle>& triangles, const float maxT)
-	{
+
+	bool traverseVisible(const Ray& ray, const std::vector<Triangle>& triangles, const float maxT) {
 		// Add visibility code here
-		// Similar to traverse, but return false as soon
-		// as a primitive is intersected
-		return true;
+		// Similar to traverse, but return false as soon as a primitive is intersected
 	}
 };
