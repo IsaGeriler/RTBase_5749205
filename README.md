@@ -1,5 +1,9 @@
 # RTBase
 
+## Current Image of Cornell Box
+
+<img width="1538" height="1584" alt="Screenshot 2026-03-27 205218" src="https://github.com/user-attachments/assets/bb3e0792-bd11-4492-ba49-af12405470c8" />
+
 ## Overview
 
 This project provides a foundational ray tracing renderer for students studying Advanced Computer Graphics. The codebase is structured to facilitate learning by including sections where students need to complete missing implementations.
