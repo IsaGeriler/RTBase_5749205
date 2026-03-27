@@ -44,7 +44,7 @@ public:
 	}
 };
 
-#define EPSILON 1e-6
+#define EPSILON 1e-6f
 
 class Triangle {
 public:
@@ -361,7 +361,7 @@ public:
 		// Add visibility code here, similar to traverse, but return false as soon as a primitive is intersected
 		// Check bounds for whether the ray intersects AABB
 		float t;
-		if (!bounds.rayAABB(ray, t) || t > maxT) return true;
+		if (!bounds.rayAABB(ray, t) || t < maxT) return true;
 
 		if (!isLeaf()) {
 			// If not leaf, traverse children nodes
@@ -371,7 +371,7 @@ public:
 			// Else ray-triangle for all triangles in node
 			float t, u, v;
 			for (unsigned int i = 0; i < triangles.size(); i++) {
-				if (triangles[i].rayIntersectMollerTrumbore(ray, t, u, v)) return false;
+				if (triangles[i].rayIntersectMollerTrumbore(ray, t, u, v) && t < maxT) return false;
 			}
 			return true;
 		}

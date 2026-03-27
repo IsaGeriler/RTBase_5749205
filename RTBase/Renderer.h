@@ -29,7 +29,9 @@ struct ScreenTile {
 
 	// Get end index of x and y
 	unsigned int tile_x_end(Film* film) const { return std::min(tile_x + tile_size - 1, film->width - 1); }
+	// unsigned int tile_x_end(Film* film) const { return std::min(tile_x + tile_size - 2, film->width - 1); }
 	unsigned int tile_y_end(Film* film) const { return std::min(tile_y + tile_size - 1, film->height - 1); }
+	// unsigned int tile_y_end(Film * film) const { return std::min(tile_y + tile_size - 2, film->height - 1); }
 };
 
 class RayTracer
@@ -79,7 +81,9 @@ public:
 			Colour emittedColour;
 			Vec3 samplePointOnLight = light->sample(shadingData, sampler, emittedColour, pdf);
 			
-			Vec3 wi = (samplePointOnLight - shadingData.x).normalize();
+			// wi - Direction to light
+			Vec3 surfaceToLight = samplePointOnLight - shadingData.x;
+			Vec3 wi = surfaceToLight.normalize();
 			float cosineTermSurface = std::max(Dot(wi, shadingData.sNormal), 0.f);
 			float cosineTermLight = std::max(-Dot(wi, light->normal(shadingData, wi)), 0.f);
 			
@@ -90,7 +94,7 @@ public:
 				// G(xi <-> xi+1) = [max((wi.n), 0) * max(-(wi.n'), 0) / lengthSq(xi - xi+1)] V(xi <-> xi+1)
 				// n - normal at path vertex xi
 				// n' - normal at path vertex xi+1
-				float gTerm = (cosineTermSurface * cosineTermLight) / (samplePointOnLight - shadingData.x).lengthSq();
+				float gTerm = (cosineTermSurface * cosineTermLight) / surfaceToLight.lengthSq();
 				
 				// Evaluate BSDF
 				Colour BSDF = shadingData.bsdf->evaluate(shadingData, wi);
@@ -151,9 +155,9 @@ public:
 				float px = x + 0.5f;
 				float py = y + 0.5f;
 				Ray ray = scene->camera.generateRay(px, py);
-				Colour col = viewNormals(ray);
+				//Colour col = viewNormals(ray);
 				//Colour col = albedo(ray);
-				//Colour col = direct(ray, samplers);
+				Colour col = direct(ray, samplers);
 				film->splat(px, py, col);
 				unsigned char r = (unsigned char)(col.r * 255);
 				unsigned char g = (unsigned char)(col.g * 255);
@@ -205,8 +209,8 @@ public:
 								float py = y + 0.5f;
 								Ray ray = scene->camera.generateRay(px, py);
 								//Colour col = viewNormals(ray);
-								Colour col = albedo(ray);
-								//Colour col = direct(ray, samplers);
+								//Colour col = albedo(ray);
+								Colour col = direct(ray, samplers);
 								film->splat(px, py, col);
 								unsigned char r = (unsigned char)(col.r * 255);
 								unsigned char g = (unsigned char)(col.g * 255);
