@@ -74,6 +74,9 @@ public:
 
 		// Compute direct lighting here
 		float pmf, pdf;
+
+		// Given a point in the scene
+		// Sample a light source
 		Light* light = scene->sampleLight(sampler, pmf);
 
 		if (light->isArea()) {
@@ -81,12 +84,13 @@ public:
 			Colour emittedColour;
 			Vec3 samplePointOnLight = light->sample(shadingData, sampler, emittedColour, pdf);
 			
-			// wi - Direction to light
+			// Direction to the light source (wi)
 			Vec3 surfaceToLight = samplePointOnLight - shadingData.x;
 			Vec3 wi = surfaceToLight.normalize();
 			float cosineTermSurface = std::max(Dot(wi, shadingData.sNormal), 0.f);
 			float cosineTermLight = std::max(-Dot(wi, light->normal(shadingData, wi)), 0.f);
 			
+			// Evaluate integrand - BSDF * Emitted * Geometric Term
 			// Evaluate Visibility
 			// V(xi <-> xi+1) - Binary Function, from Ray Trace
 			if (scene->visible(shadingData.x, samplePointOnLight)) {
@@ -99,7 +103,7 @@ public:
 				// Evaluate BSDF
 				Colour BSDF = shadingData.bsdf->evaluate(shadingData, wi);
 
-				// Multiply and return
+				// Multiply, divide by PDF, and return
 				return BSDF * emittedColour * gTerm / (pmf * pdf);
 			}
 		}
