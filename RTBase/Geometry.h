@@ -138,7 +138,7 @@ public:
 		float beta = r2 * sqrtf(r1);
 		float gamma = 1 - (alpha + beta);
 
-		return vertices[0].p * alpha + vertices[1].p * beta + vertices[2].p * gamma;
+		return (vertices[0].p * alpha) + (vertices[1].p * beta) + (vertices[2].p * gamma);
 	}
 
 	Vec3 gNormal() {

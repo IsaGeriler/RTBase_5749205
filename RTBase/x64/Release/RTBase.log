@@ -1,19 +1,19 @@
 ﻿  Main.cpp
-C:\dev\VisualStudio\WM9M3\RTBase\Imaging.h(260,23): warning C4018: '<': signed/unsigned mismatch
+C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Imaging.h(260,23): warning C4018: '<': signed/unsigned mismatch
   (compiling source file 'Main.cpp')
   
-C:\dev\VisualStudio\WM9M3\RTBase\Imaging.h(260,48): warning C4018: '<': signed/unsigned mismatch
+C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Imaging.h(260,48): warning C4018: '<': signed/unsigned mismatch
   (compiling source file 'Main.cpp')
   
-C:\dev\VisualStudio\WM9M3\RTBase\Imaging.h(268,21): warning C4018: '<': signed/unsigned mismatch
+C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Imaging.h(268,21): warning C4018: '<': signed/unsigned mismatch
   (compiling source file 'Main.cpp')
   
-C:\dev\VisualStudio\WM9M3\RTBase\Renderer.h(169,30): warning C4018: '<': signed/unsigned mismatch
+C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Renderer.h(182,30): warning C4018: '<': signed/unsigned mismatch
   (compiling source file 'Main.cpp')
   
   Generating code
-  4 of 2088 functions ( 0.2%) were compiled, the rest were copied from previous compilation.
-    0 functions were new in current compilation
-    15 functions had inline decision re-evaluated but remain unchanged
+  9 of 2090 functions ( 0.4%) were compiled, the rest were copied from previous compilation.
+    1 functions were new in current compilation
+    152 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
-  RTBase.vcxproj -> C:\dev\VisualStudio\WM9M3\x64\Release\RTBase.exe
+  RTBase.vcxproj -> C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\x64\Release\RTBase.exe

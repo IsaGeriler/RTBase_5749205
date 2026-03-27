@@ -71,20 +71,33 @@ public:
 		}
 
 		// Compute direct lighting here
-		float pmf;
+		float pmf, pdf;
 		Light* light = scene->sampleLight(sampler, pmf);
 
 		if (light->isArea()) {
 			// Sample point on light and store returned emission
 			Colour emittedColour;
-			Vec3 sample = light->sample(shadingData, sampler, emittedColour, pmf);
-			// Evaluate Geometry Term
-			Vec3 wi = sample - shadingData.x;
-			// Evaluate Visibility
+			Vec3 samplePointOnLight = light->sample(shadingData, sampler, emittedColour, pdf);
 			
-			// Evaluate BSDF
-			shadingData.bsdf->evaluate(shadingData, wi);
-			// Multiply and return
+			Vec3 wi = (samplePointOnLight - shadingData.x).normalize();
+			float cosineTermSurface = std::max(Dot(wi, shadingData.sNormal), 0.f);
+			float cosineTermLight = std::max(-Dot(wi, light->normal(shadingData, wi)), 0.f);
+			
+			// Evaluate Visibility
+			// V(xi <-> xi+1) - Binary Function, from Ray Trace
+			if (scene->visible(shadingData.x, samplePointOnLight)) {
+				// Evaluate Geometry Term
+				// G(xi <-> xi+1) = [max((wi.n), 0) * max(-(wi.n'), 0) / lengthSq(xi - xi+1)] V(xi <-> xi+1)
+				// n - normal at path vertex xi
+				// n' - normal at path vertex xi+1
+				float gTerm = (cosineTermSurface * cosineTermLight) / (samplePointOnLight - shadingData.x).lengthSq();
+				
+				// Evaluate BSDF
+				Colour BSDF = shadingData.bsdf->evaluate(shadingData, wi);
+
+				// Multiply and return
+				return BSDF * emittedColour * gTerm / (pmf * pdf);
+			}
 		}
 	}
 	Colour pathTrace(Ray& r, Colour& pathThroughput, int depth, Sampler* sampler)
@@ -191,8 +204,8 @@ public:
 								float px = x + 0.5f;
 								float py = y + 0.5f;
 								Ray ray = scene->camera.generateRay(px, py);
-								Colour col = viewNormals(ray);
-								//Colour col = albedo(ray);
+								//Colour col = viewNormals(ray);
+								Colour col = albedo(ray);
 								//Colour col = direct(ray, samplers);
 								film->splat(px, py, col);
 								unsigned char r = (unsigned char)(col.r * 255);

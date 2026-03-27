@@ -136,7 +136,7 @@ public:
 	Light* sampleLight(Sampler* sampler, float& pmf)
 	{
 		pmf = 1.f / lights.size();
-		int li = std::floor(sampler->next() * lights.size());
+		unsigned int li = (unsigned int)std::floor(sampler->next() * lights.size());
 		return lights[li];
 	}
 	// Do not modify any code below this line
