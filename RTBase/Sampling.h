@@ -13,10 +13,11 @@ class MTRandom : public Sampler {
 public:
 	std::mt19937 generator;
 	std::uniform_real_distribution<float> dist;
+
 	MTRandom(unsigned int seed = 1) : dist(0.0f, 1.0f) {
 		generator.seed(seed);
 	}
-
+	
 	float next() {
 		return dist(generator);
 	}
@@ -29,21 +30,20 @@ public:
 		// Add code here
 		float theta = acos(r1);
 		float phi = 2.f * M_PI * r2;
-		Vec3 vec = SphericalCoordinates::sphericalToWorld(theta, phi);
-		return vec;
+		return SphericalCoordinates::sphericalToWorld(theta, phi);
 	}
 
 	static float uniformHemispherePDF(const Vec3 wi) {
 		// Add code here
-		return 1.f / (2.f * M_PI);  // for now
+		// Solid Angle PDF
+		return 1.f / (2.f * M_PI);
 	}
-
+	
 	static Vec3 cosineSampleHemisphere(float r1, float r2) {
 		// Add code here
 		float theta = acos(sqrtf(r1));
 		float phi = 2.f * M_PI * r2;
-		Vec3 vec = SphericalCoordinates::sphericalToWorld(theta, phi);
-		return vec;
+		return SphericalCoordinates::sphericalToWorld(theta, phi);
 	}
 
 	static float cosineHemispherePDF(const Vec3 wi) {
@@ -56,12 +56,12 @@ public:
 		// Add code here
 		float theta = acos(1.f - 2.f * r1);
 		float phi = 2.f * M_PI * r2;
-		Vec3 vec = SphericalCoordinates::sphericalToWorld(theta, phi);
-		return vec;
+		return SphericalCoordinates::sphericalToWorld(theta, phi);
 	}
 
 	static float uniformSpherePDF(const Vec3& wi) {
 		// Add code here
-		return 1.f / (4.f * M_PI);  // for now
+		// Solid Angle PDF
+		return 1.f / (4.f * M_PI);
 	}
 };

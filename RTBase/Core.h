@@ -90,13 +90,6 @@ public:
 	{
 		return ((0.2126f * r) + (0.7152f * g) + (0.0722f * b));
 	}
-	void applyGammaCorrection(float gamma)
-	{
-		float invGamma = 1.f / gamma;
-		r = gamma > 0 ? std::powf(r, invGamma) : 0.f;
-		g = gamma > 0 ? std::powf(g, invGamma) : 0.f;
-		b = gamma > 0 ? std::powf(b, invGamma) : 0.f;
-	}
 };
 
 class Vec3
@@ -152,10 +145,6 @@ public:
 	{
 		return Vec3(x * v.x, y * v.y, z * v.z);
 	}
-	float& operator[](const unsigned int index)
-	{
-		return coords[index];
-	}
 	Vec3 perspectiveDivide() const
 	{
 		return Vec3(x / w, y / w, z / w, 1.0f / w);
@@ -181,6 +170,10 @@ public:
 	Vec3 cross(Vec3 v) const
 	{
 		return Vec3((y * v.z) - (z * v.y), (z * v.x) - (x * v.z), (x * v.y) - (y * v.x));
+	}
+	float& operator[](int index)
+	{
+		return coords[index];
 	}
 };
 
@@ -529,7 +522,8 @@ public:
 		{
 			float l = 1.0f / sqrtf(w.x * w.x + w.z * w.z);
 			u = Vec3(w.z * l, 0.0f, -w.x * l);
-		} else
+		}
+		else
 		{
 			float l = 1.0f / sqrtf(w.y * w.y + w.z * w.z);
 			u = Vec3(0, w.z * l, -w.y * l);
@@ -575,10 +569,4 @@ T& use()
 {
 	static T t;
 	return t;
-}
-
-template<typename T>
-T clamp(T val, T min, T max)
-{
-	return std::max(std::min(max, val), min);
 }

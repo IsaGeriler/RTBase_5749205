@@ -6,22 +6,22 @@
 #include "Imaging.h"
 #include "Materials.h"
 #include "Lights.h"
-#include <cmath>
 
-class Camera
-{
+class Camera {
 public:
-	Matrix projectionMatrix;
-	Matrix inverseProjectionMatrix;
-	Matrix camera;
-	Matrix cameraToView;
+	Matrix projectionMatrix;		 // Camera -> Clip Space (P)
+	Matrix inverseProjectionMatrix;  // Clip Space -> Camera (inverse P)
+	Matrix camera;					 // Camera -> World (inverse V)
+	Matrix cameraToView;			 // World -> Camera (V)
+
 	float width = 0;
 	float height = 0;
-	Vec3 origin;
-	Vec3 viewDirection;
 	float Afilm;
-	void init(Matrix ProjectionMatrix, int screenwidth, int screenheight)
-	{
+	
+	Vec3 origin;		 // Ray Origin
+	Vec3 viewDirection;
+	
+	void init(Matrix ProjectionMatrix, int screenwidth, int screenheight) {
 		projectionMatrix = ProjectionMatrix;
 		inverseProjectionMatrix = ProjectionMatrix.invert();
 		width = (float)screenwidth;
@@ -31,8 +31,8 @@ public:
 		float Hlens = Wlens * aspect;
 		Afilm = Wlens * Hlens;
 	}
-	void updateView(Matrix V)
-	{
+
+	void updateView(Matrix V) {
 		camera = V;
 		cameraToView = V.invert();
 		origin = camera.mulPoint(Vec3(0, 0, 0));
@@ -40,24 +40,25 @@ public:
 		viewDirection = camera.mulVec(viewDirection);
 		viewDirection = viewDirection.normalize();
 	}
+
 	// Add code here
-	Ray generateRay(float x, float y)
-	{
-		// Assume x and y are in range of [0, W] and [0, H]
+	Ray generateRay(float x, float y) {
+		// Normalize points to NDC
 		float xc = (2.f * x / width) - 1.f;
 		float yc = (2.f * (1.f - (y / height))) - 1.f;
 
-		// NDC to Clip Space to Homogenous to Camera Space
-		Vec3 p_clip = Vec3(xc, yc, 0.f, 1.f);
-		Vec3 d_camera = inverseProjectionMatrix.mulPointAndPerspectiveDivide(p_clip);
+		// NDC to Clip Space
+		Vec3 pclip(xc, yc, 0.f);
+
+		// Clip Space to Camera Space
+		Vec3 dCamera = inverseProjectionMatrix.mulPointAndPerspectiveDivide(pclip);
 
 		// Camera Space to World Space
-		Vec3 dir = camera.mulVec(d_camera);
-		dir = dir.normalize();
+		Vec3 dir = camera.mulVec(dCamera).normalize();
 		return Ray(origin, dir);
 	}
-	bool projectOntoCamera(const Vec3& p, float& x, float& y)
-	{
+
+	bool projectOntoCamera(const Vec3& p, float& x, float& y) {
 		Vec3 pview = cameraToView.mulPoint(p);
 		Vec3 pproj = projectionMatrix.mulPointAndPerspectiveDivide(pview);
 		x = (pproj.x + 1.0f) * 0.5f;
@@ -87,8 +88,8 @@ public:
 	{
 		// Add BVH building code here
 		std::vector<Triangle> inputTriangles;
-		for (unsigned int i = 0; i < triangles.size(); i++) {
-			inputTriangles.emplace_back(triangles[i]);
+		for (int i = 0; i < triangles.size(); i++) {
+			inputTriangles.push_back(triangles[i]);
 		}
 		triangles.clear();
 		bvh = new BVHNode();
@@ -108,36 +109,12 @@ public:
 	}
 	IntersectionData traverse(const Ray& ray)
 	{
-		IntersectionData intersection;
-		intersection.t = FLT_MAX;
-		for (int i = 0; i < triangles.size(); i++)
-		{
-			float t;
-			float u;
-			float v;
-			if (triangles[i].rayIntersectMollerTrumbore(ray, t, u, v))
-			{
-				if (t < intersection.t)
-				{
-					intersection.t = t;
-					intersection.ID = i;
-					intersection.alpha = u;
-					intersection.beta = v;
-					intersection.gamma = 1.0f - (u + v);
-				}
-			}
-		}
-		return intersection;
-	}
-	IntersectionData bvh_traverse(const Ray& ray)
-	{
 		return bvh->traverse(ray, triangles);
 	}
-	Light* sampleLight(Sampler* sampler, float& pmf)
-	{
+	Light* sampleLight(Sampler* sampler, float& pmf) {
 		pmf = 1.f / lights.size();
-		unsigned int li = (unsigned int)std::floor(sampler->next() * lights.size());
-		return lights[li];
+		unsigned int index = (unsigned int)floor(sampler->next() * lights.size());
+		return lights[index];
 	}
 	// Do not modify any code below this line
 	void init(std::vector<Triangle> meshTriangles, std::vector<BSDF*> meshMaterials, Light* _background)
@@ -195,7 +172,8 @@ public:
 			}
 			shadingData.frame.fromVector(shadingData.sNormal);
 			shadingData.t = intersection.t;
-		} else
+		}
+		else
 		{
 			shadingData.wo = -ray.dir;
 			shadingData.t = intersection.t;
