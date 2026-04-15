@@ -211,15 +211,17 @@ struct IntersectionData {
 // will also adapt more from:
 // https://jacco.ompf2.com/2022/04/21/how-to-build-a-bvh-part-3-quick-builds/
 // https://www.sci.utah.edu/~wald/Publications/2007/ParallelBVHBuild/fastbuild.pdf
+std::vector<unsigned int> triangleIndexes;
 class BVHNode {
 private:
 	bool isLeafNode() const { return l == NULL && r == NULL; }
 
 	void calculateBounds(std::vector<Triangle>& triangles) {
 		for (size_t i = offset; i < offset + num; i++) {
-			bounds.extend(triangles[i].vertices[0].p);
-			bounds.extend(triangles[i].vertices[1].p);
-			bounds.extend(triangles[i].vertices[2].p);
+			unsigned int triangleIdx = triangleIndexes[i];
+			bounds.extend(triangles[triangleIdx].vertices[0].p);
+			bounds.extend(triangles[triangleIdx].vertices[1].p);
+			bounds.extend(triangles[triangleIdx].vertices[2].p);
 		}
 	}
 
@@ -229,17 +231,18 @@ private:
 		AABB left, right;
 		int leftCount = 0, rightCount = 0;
 		for (size_t i = offset; i < offset + num; i++) {
-			if (triangles[i].centre()[axis] < candidatePos) {
+			unsigned int triangleIdx = triangleIndexes[i];
+			if (triangles[triangleIdx].centre()[axis] < candidatePos) {
 				leftCount++;
-				left.extend(triangles[i].vertices[0].p);
-				left.extend(triangles[i].vertices[1].p);
-				left.extend(triangles[i].vertices[2].p);
+				left.extend(triangles[triangleIdx].vertices[0].p);
+				left.extend(triangles[triangleIdx].vertices[1].p);
+				left.extend(triangles[triangleIdx].vertices[2].p);
 			}
 			else {
 				rightCount++;
-				right.extend(triangles[i].vertices[0].p);
-				right.extend(triangles[i].vertices[1].p);
-				right.extend(triangles[i].vertices[2].p);
+				right.extend(triangles[triangleIdx].vertices[0].p);
+				right.extend(triangles[triangleIdx].vertices[1].p);
+				right.extend(triangles[triangleIdx].vertices[2].p);
 			}
 		}
 		float cost = leftCount * left.area() + rightCount * right.area();
@@ -258,7 +261,8 @@ private:
 		float bestPos = 0.f, bestCost = FLT_MAX;
 		for (int axis = 0; axis < 3; axis++) {
 			for (size_t i = offset; i < offset + num; i++) {
-				float candidatePos = triangles[i].centre()[axis];
+				unsigned int triangleIdx = triangleIndexes[i];
+				float candidatePos = triangles[triangleIdx].centre()[axis];
 				float cost = splitPlanesSAH(triangles, axis, candidatePos);
 				if (cost < bestCost) {
 					bestAxis = axis;
@@ -278,8 +282,8 @@ private:
 		int j = i + num - 1;
 
 		while (i <= j) {
-			if (triangles[i].centre()[axis] < splitPos) i++;
-			else std::swap(triangles[i], triangles[j--]);
+			if (triangles[triangleIndexes[i]].centre()[axis] < splitPos) i++;
+			else std::swap(triangleIndexes[i], triangleIndexes[j--]);
 		}
 
 		int leftCount = i - offset;
@@ -317,20 +321,23 @@ public:
 	}
 
 	// Note there are several options for how to implement the build method. Update this as required
-	void build(std::vector<Triangle>& inputTriangles, std::vector<Triangle>& outputTriangles) {
+	void build(std::vector<Triangle>& inputTriangles) {
 		// Add BVH building code here
 		// Update number of primitives in the root, otherwise subdivide will be immediately terminated
 		offset = 0;
 		num = inputTriangles.size();
+
+		// Save the original index positions, for optimising, to perform index swapping
+		// As the inputTriangles contain more data, e.g. material index, it will be more costly
+		for (unsigned int i = 0; i < inputTriangles.size(); i++) {
+			triangleIndexes.push_back(i);
+		}
 
 		// Calculate the root bounds
 		calculateBounds(inputTriangles);
 		
 		// Subdivide the root
 		subdivide(inputTriangles);
-
-		// Copy the reconstructed vector to the output vector
-		std::copy(inputTriangles.begin(), inputTriangles.end(), std::back_inserter(outputTriangles));
 	}
 
 	void traverse(const Ray& ray, const std::vector<Triangle>& triangles, IntersectionData& intersection) {
@@ -341,9 +348,9 @@ public:
 		if (isLeafNode()) {
 			float t, u, v;
 			for (size_t i = offset; i < offset + num; i++) {
-				if (triangles[i].rayIntersect(ray, t, u, v)) {
+				if (triangles[triangleIndexes[i]].rayIntersect(ray, t, u, v)) {
 					if (t < intersection.t) {
-						intersection.ID = i;
+						intersection.ID = triangleIndexes[i];
 						intersection.t = t;
 						intersection.alpha = u;
 						intersection.beta = v;
@@ -373,7 +380,7 @@ public:
 			float u, v;
 			for (size_t i = offset; i < offset + num; i++) {
 				// Terminate at the first intersect
-				if (triangles[i].rayIntersect(ray, t, u, v) && t <= maxT) return false;
+				if (triangles[triangleIndexes[i]].rayIntersect(ray, t, u, v) && t <= maxT) return false;
 			}
 			return true;
 		} else {

@@ -1,27 +1,24 @@
 ﻿  Main.cpp
-C:\dev\VisualStudio\WM9M3\RTBase\Geometry.h(324,28): warning C4267: '=': conversion from 'size_t' to 'unsigned char', possible loss of data
+C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Geometry.h(328,28): warning C4267: '=': conversion from 'size_t' to 'unsigned char', possible loss of data
   (compiling source file 'Main.cpp')
   
-C:\dev\VisualStudio\WM9M3\RTBase\Geometry.h(346,25): warning C4267: '=': conversion from 'size_t' to 'unsigned int', possible loss of data
+C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Imaging.h(207,23): warning C4018: '<': signed/unsigned mismatch
   (compiling source file 'Main.cpp')
   
-C:\dev\VisualStudio\WM9M3\RTBase\Imaging.h(207,23): warning C4018: '<': signed/unsigned mismatch
+C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Imaging.h(207,48): warning C4018: '<': signed/unsigned mismatch
   (compiling source file 'Main.cpp')
   
-C:\dev\VisualStudio\WM9M3\RTBase\Imaging.h(207,48): warning C4018: '<': signed/unsigned mismatch
+C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Imaging.h(215,21): warning C4018: '<': signed/unsigned mismatch
   (compiling source file 'Main.cpp')
   
-C:\dev\VisualStudio\WM9M3\RTBase\Imaging.h(215,21): warning C4018: '<': signed/unsigned mismatch
-  (compiling source file 'Main.cpp')
-  
-C:\dev\VisualStudio\WM9M3\RTBase\Renderer.h(181,30): warning C4018: '<': signed/unsigned mismatch
+C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Renderer.h(181,30): warning C4018: '<': signed/unsigned mismatch
   (compiling source file 'Main.cpp')
   
   Generating code
-C:\dev\VisualStudio\WM9M3\RTBase\Geometry.h(383): warning C4715: 'BVHNode::traverseVisible': not all control paths return a value
-C:\dev\VisualStudio\WM9M3\RTBase\Renderer.h(87): warning C4715: 'RayTracer::computeDirect': not all control paths return a value
-  44 of 2085 functions ( 2.1%) were compiled, the rest were copied from previous compilation.
-    2 functions were new in current compilation
-    126 functions had inline decision re-evaluated but remain unchanged
+C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Geometry.h(389): warning C4715: 'BVHNode::traverseVisible': not all control paths return a value
+C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Renderer.h(87): warning C4715: 'RayTracer::computeDirect': not all control paths return a value
+  58 of 2063 functions ( 2.8%) were compiled, the rest were copied from previous compilation.
+    4 functions were new in current compilation
+    67 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
-  RTBase.vcxproj -> C:\dev\VisualStudio\WM9M3\x64\Release\RTBase.exe
+  RTBase.vcxproj -> C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\x64\Release\RTBase.exe
