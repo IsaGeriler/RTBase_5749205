@@ -208,10 +208,14 @@ struct IntersectionData {
 
 // Adapted from: https://jacco.ompf2.com/2022/04/13/how-to-build-a-bvh-part-1-basics/
 //				 https://jacco.ompf2.com/2022/04/18/how-to-build-a-bvh-part-2-faster-rays/
-// will also adapt more from:
-// https://jacco.ompf2.com/2022/04/21/how-to-build-a-bvh-part-3-quick-builds/
-// https://www.sci.utah.edu/~wald/Publications/2007/ParallelBVHBuild/fastbuild.pdf
+//				 https://jacco.ompf2.com/2022/04/21/how-to-build-a-bvh-part-3-quick-builds/
 std::vector<unsigned int> triangleIndexes;
+
+struct SAHBins {
+	AABB bounds;
+	unsigned int triangleCount = 0;
+};
+
 class BVHNode {
 private:
 	bool isLeafNode() const { return l == NULL && r == NULL; }
@@ -225,57 +229,85 @@ private:
 		}
 	}
 
-	// SAH Split Planes
-	float splitPlanesSAH(std::vector<Triangle>& triangles, int axis, float candidatePos) {
-		// Cost = LeftPrimCount * LeftAABBArea + RightPrimCount * RightAABBArea
-		AABB left, right;
-		int leftCount = 0, rightCount = 0;
-		for (size_t i = offset; i < offset + num; i++) {
-			unsigned int triangleIdx = triangleIndexes[i];
-			if (triangles[triangleIdx].centre()[axis] < candidatePos) {
-				leftCount++;
-				left.extend(triangles[triangleIdx].vertices[0].p);
-				left.extend(triangles[triangleIdx].vertices[1].p);
-				left.extend(triangles[triangleIdx].vertices[2].p);
-			}
-			else {
-				rightCount++;
-				right.extend(triangles[triangleIdx].vertices[0].p);
-				right.extend(triangles[triangleIdx].vertices[1].p);
-				right.extend(triangles[triangleIdx].vertices[2].p);
-			}
-		}
-		float cost = leftCount * left.area() + rightCount * right.area();
-		return cost > 0 ? cost : FLT_MAX;
-	}
+	float bestSAHSplitPlane(std::vector<Triangle>& triangles, int& axis, float& splitPos) {
+		float bestCost = FLT_MAX;
+		for (int ax = 0; ax < 3; ax++) {
+			float boundsMin = FLT_MAX;
+			float boundsMax = -FLT_MAX;
 
-	// Build sub-trees
-	void subdivide(std::vector<Triangle>& triangles) {
-		// Find Parent Cost
-		Vec3 extent = bounds.max - bounds.min;
-		float parentArea = extent.x * extent.y + extent.x * extent.z + extent.y * extent.z;
-		float parentCost = num * parentArea;
-
-		// Calculate SAH Split Planes
-		int bestAxis = -1;
-		float bestPos = 0.f, bestCost = FLT_MAX;
-		for (int axis = 0; axis < 3; axis++) {
 			for (size_t i = offset; i < offset + num; i++) {
-				unsigned int triangleIdx = triangleIndexes[i];
-				float candidatePos = triangles[triangleIdx].centre()[axis];
-				float cost = splitPlanesSAH(triangles, axis, candidatePos);
+				boundsMin = std::min(boundsMin, triangles[triangleIndexes[i]].centre()[ax]);
+				boundsMax = std::max(boundsMin, triangles[triangleIndexes[i]].centre()[ax]);
+			}
+			if (boundsMin == boundsMax) continue;
+
+			// Populate bins
+			SAHBins bins[BUILD_BINS];
+			float scale = BUILD_BINS / (boundsMax - boundsMin);
+			for (size_t i = offset; i < offset + num; i++) {
+				int triangleIdx = triangleIndexes[i];
+				int binIdx = std::min(BUILD_BINS - 1, (int)((triangles[triangleIdx].centre()[ax] - boundsMin) * scale));
+				
+				bins[binIdx].triangleCount++;
+				bins[binIdx].bounds.extend(triangles[triangleIdx].vertices[0].p);
+				bins[binIdx].bounds.extend(triangles[triangleIdx].vertices[1].p);
+				bins[binIdx].bounds.extend(triangles[triangleIdx].vertices[2].p);
+			}
+
+			// Gather Data between the bins
+			AABB leftBBox, rightBBox;
+			float leftArea[BUILD_BINS - 1]{}, rightArea[BUILD_BINS - 1]{};
+			int leftCount[BUILD_BINS - 1]{}, rightCount[BUILD_BINS - 1]{};
+			int leftSum = 0, rightSum = 0;
+
+			for (int i = 0; i < BUILD_BINS - 1; i++) {
+				leftSum += bins[i].triangleCount;
+				leftCount[i] = leftSum;
+				leftBBox.extend(bins[i].bounds.min);
+				leftBBox.extend(bins[i].bounds.max);
+				leftArea[i] = leftBBox.area();
+
+				rightSum += bins[BUILD_BINS - 1 - i].triangleCount;
+				rightCount[BUILD_BINS - 2 - i] = rightSum;
+				rightBBox.extend(bins[BUILD_BINS - 1 - i].bounds.min);
+				rightBBox.extend(bins[BUILD_BINS - 1 - i].bounds.max);
+				rightArea[BUILD_BINS - 2 - i] = rightBBox.area();
+			}
+
+			// Calculate SAH cost
+			scale = (boundsMax - boundsMin) / BUILD_BINS;
+			for (int i = 0; i < BUILD_BINS - 1; i++) {
+				// Cost = LeftPrimCount * LeftAABBArea + RightPrimCount * RightAABBArea
+				float cost = leftCount[i] * leftArea[i] + rightCount[i] * rightArea[i];
 				if (cost < bestCost) {
-					bestAxis = axis;
-					bestPos = candidatePos;
+					splitPos = boundsMin + scale * (i + 1);
+					axis = ax;
 					bestCost = cost;
 				}
 			}
 		}
-		int axis = bestAxis;
-		float splitPos = bestPos;
+		return bestCost;
+	}
+
+	float calculateUnsplitCost() {
+		Vec3 extent = bounds.max - bounds.min;
+		float parentArea = extent.x * extent.y + extent.x * extent.z + extent.y * extent.z;
+		return num * parentArea;
+	}
+
+	// Build sub-trees
+	void subdivide(std::vector<Triangle>& triangles) {
+		// Calculate SAH Split Planes
+		int bestAxis = -1;
+		float bestPos = 0.f;
+		
+		int axis;
+		float splitPos;
+		float splitCost = bestSAHSplitPlane(triangles, axis, splitPos);
+		float parentCost = calculateUnsplitCost();
 		
 		// Terminate Recursion
-		if (bestCost >= parentCost) return;
+		if (splitCost >= parentCost) return;
 
 		// Reorder Triangles
 		int i = offset;
