@@ -115,17 +115,22 @@ public:
 			}
 			// Calculate Direct Lighting
 			Colour direct = pathThroughput * computeDirect(shadingData, sampler);
+			if (depth > 10) return direct;
 
 			// Sample Indirect Direction
-			Vec3 incomingRadiance = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
-			float pdf = SamplingDistributions::cosineHemispherePDF(incomingRadiance);
-			incomingRadiance = shadingData.frame.toWorld(incomingRadiance);
-			r.init(shadingData.x + (incomingRadiance * EPSILON), incomingRadiance);
+			// Vec3 incomingRadiance = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
+			// float pdf = SamplingDistributions::cosineHemispherePDF(incomingRadiance);
+			// incomingRadiance = shadingData.frame.toWorld(incomingRadiance);
+			// Colour indirect = shadingData.bsdf->evaluate(shadingData, wi);
+			
+			Colour indirect;
+			float pdf;
+			Vec3 wi = shadingData.bsdf->sample(shadingData, sampler, indirect, pdf);
+			r.init(shadingData.x + (wi * EPSILON), wi);
 
 			// Update path throughput (multiply with BSDF and cosine)
-			Colour BSDF = shadingData.bsdf->evaluate(shadingData, incomingRadiance);
-			float cosine = std::max(Dot(incomingRadiance, shadingData.sNormal), 0.f);
-			pathThroughput = pathThroughput * BSDF * cosine / pdf;
+			float cosine = std::max(Dot(wi, shadingData.sNormal), 0.f);
+			pathThroughput = pathThroughput * indirect * cosine / pdf;
 
 			// Apply Russian Roulette
 			if (depth > 3) {

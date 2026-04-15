@@ -1,2 +1,34 @@
 ﻿  Main.cpp
+C:\dev\VisualStudio\WM9M3\RTBase\Sampling.h(39,14): warning C4305: 'return': truncation from 'double' to 'float'
+  (compiling source file 'Main.cpp')
+  
+C:\dev\VisualStudio\WM9M3\RTBase\Sampling.h(65,14): warning C4305: 'return': truncation from 'double' to 'float'
+  (compiling source file 'Main.cpp')
+  
+C:\dev\VisualStudio\WM9M3\RTBase\Geometry.h(286,28): warning C4267: '=': conversion from 'size_t' to 'unsigned int', possible loss of data
+  (compiling source file 'Main.cpp')
+  
+C:\dev\VisualStudio\WM9M3\RTBase\Geometry.h(308,25): warning C4267: '=': conversion from 'size_t' to 'unsigned int', possible loss of data
+  (compiling source file 'Main.cpp')
+  
+C:\dev\VisualStudio\WM9M3\RTBase\Imaging.h(151,15): warning C4305: 'argument': truncation from 'double' to 'float'
+  (compiling source file 'Main.cpp')
+  
+C:\dev\VisualStudio\WM9M3\RTBase\Imaging.h(151,48): warning C4305: 'argument': truncation from 'double' to 'float'
+  (compiling source file 'Main.cpp')
+  
+C:\dev\VisualStudio\WM9M3\RTBase\Imaging.h(207,23): warning C4018: '<': signed/unsigned mismatch
+  (compiling source file 'Main.cpp')
+  
+C:\dev\VisualStudio\WM9M3\RTBase\Imaging.h(207,48): warning C4018: '<': signed/unsigned mismatch
+  (compiling source file 'Main.cpp')
+  
+C:\dev\VisualStudio\WM9M3\RTBase\Imaging.h(215,21): warning C4018: '<': signed/unsigned mismatch
+  (compiling source file 'Main.cpp')
+  
+C:\dev\VisualStudio\WM9M3\RTBase\Renderer.h(181,30): warning C4018: '<': signed/unsigned mismatch
+  (compiling source file 'Main.cpp')
+  
+C:\dev\VisualStudio\WM9M3\RTBase\Geometry.h(345,1): warning C4715: 'BVHNode::traverseVisible': not all control paths return a value
+C:\dev\VisualStudio\WM9M3\RTBase\Renderer.h(87,1): warning C4715: 'RayTracer::computeDirect': not all control paths return a value
   RTBase.vcxproj -> C:\dev\VisualStudio\WM9M3\x64\Debug\RTBase.exe

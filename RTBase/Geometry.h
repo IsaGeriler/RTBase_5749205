@@ -207,8 +207,8 @@ struct IntersectionData {
 };
 
 // Adapted from: https://jacco.ompf2.com/2022/04/13/how-to-build-a-bvh-part-1-basics/
+//				 https://jacco.ompf2.com/2022/04/18/how-to-build-a-bvh-part-2-faster-rays/
 // will also adapt more from:
-// https://jacco.ompf2.com/2022/04/18/how-to-build-a-bvh-part-2-faster-rays/
 // https://jacco.ompf2.com/2022/04/21/how-to-build-a-bvh-part-3-quick-builds/
 // https://www.sci.utah.edu/~wald/Publications/2007/ParallelBVHBuild/fastbuild.pdf
 class BVHNode {
@@ -224,20 +224,56 @@ private:
 	}
 
 	// SAH Split Planes
-	void sahSplit() {
-		// TO:DO Later
+	float splitPlanesSAH(std::vector<Triangle>& triangles, int axis, float candidatePos) {
+		// Cost = LeftPrimCount * LeftAABBArea + RightPrimCount * RightAABBArea
+		AABB left, right;
+		int leftCount = 0, rightCount = 0;
+		for (size_t i = offset; i < offset + num; i++) {
+			if (triangles[i].centre()[axis] < candidatePos) {
+				leftCount++;
+				left.extend(triangles[i].vertices[0].p);
+				left.extend(triangles[i].vertices[1].p);
+				left.extend(triangles[i].vertices[2].p);
+			}
+			else {
+				rightCount++;
+				right.extend(triangles[i].vertices[0].p);
+				right.extend(triangles[i].vertices[1].p);
+				right.extend(triangles[i].vertices[2].p);
+			}
+		}
+		float cost = leftCount * left.area() + rightCount * right.area();
+		return cost > 0 ? cost : FLT_MAX;
 	}
 
 	// Build sub-trees
 	void subdivide(std::vector<Triangle>& triangles) {
-		if (num <= MAXNODE_TRIANGLES) return;
-
+		// Find Parent Cost
 		Vec3 extent = bounds.max - bounds.min;
-		unsigned int axis = 0;
-		if (extent.y > extent.x) axis = 1;
-		if (extent.z > extent[axis]) axis = 2;
-		float splitPos = bounds.min[axis] + extent[axis] * 0.5f;
+		float parentArea = extent.x * extent.y + extent.x * extent.z + extent.y * extent.z;
+		float parentCost = num * parentArea;
 
+		// Calculate SAH Split Planes
+		int bestAxis = -1;
+		float bestPos = 0.f, bestCost = FLT_MAX;
+		for (int axis = 0; axis < 3; axis++) {
+			for (size_t i = offset; i < offset + num; i++) {
+				float candidatePos = triangles[i].centre()[axis];
+				float cost = splitPlanesSAH(triangles, axis, candidatePos);
+				if (cost < bestCost) {
+					bestAxis = axis;
+					bestPos = candidatePos;
+					bestCost = cost;
+				}
+			}
+		}
+		int axis = bestAxis;
+		float splitPos = bestPos;
+		
+		// Terminate Recursion
+		if (bestCost >= parentCost) return;
+
+		// Reorder Triangles
 		int i = offset;
 		int j = i + num - 1;
 
@@ -249,6 +285,7 @@ private:
 		int leftCount = i - offset;
 		if (leftCount == 0 || leftCount == num) return;
 
+		// Initialize Child Nodes
 		l = new BVHNode();
 		l->offset = offset;
 		l->num = leftCount;
@@ -272,7 +309,7 @@ public:
 	// This can store an offset and number of triangles in a global triangle list for example
 	// But you can store this however you want!
 	unsigned int offset = 0;
-	unsigned int num = 0;
+	unsigned char num = 0;
 	
 	BVHNode() {
 		r = NULL;
@@ -283,6 +320,7 @@ public:
 	void build(std::vector<Triangle>& inputTriangles, std::vector<Triangle>& outputTriangles) {
 		// Add BVH building code here
 		// Update number of primitives in the root, otherwise subdivide will be immediately terminated
+		offset = 0;
 		num = inputTriangles.size();
 
 		// Calculate the root bounds
@@ -302,7 +340,7 @@ public:
 		// If node is leaf, check primitives - Else, check the childs
 		if (isLeafNode()) {
 			float t, u, v;
-			for (size_t i = 0; i < triangles.size(); i++) {
+			for (size_t i = offset; i < offset + num; i++) {
 				if (triangles[i].rayIntersect(ray, t, u, v)) {
 					if (t < intersection.t) {
 						intersection.ID = i;
@@ -333,7 +371,7 @@ public:
 
 		if (isLeafNode()) {
 			float u, v;
-			for (size_t i = 0; i < triangles.size(); i++) {
+			for (size_t i = offset; i < offset + num; i++) {
 				// Terminate at the first intersect
 				if (triangles[i].rayIntersect(ray, t, u, v) && t <= maxT) return false;
 			}
