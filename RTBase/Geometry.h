@@ -5,10 +5,10 @@
 #define MOLLER_EPSILON 1e-6f
 
 // For BVH (Bounding Volume Hierarchy)
-#define MAXNODE_TRIANGLES 2
+#define MAXNODE_TRIANGLES 8
 #define BOUNDS_COST 1.0f
-#define INTERSECT_COST 1.0f
-#define BUILD_BINS 8
+#define INTERSECT_COST 1.5f
+#define BUILD_BINS 32
 
 #include <utility>
 #include <vector>
