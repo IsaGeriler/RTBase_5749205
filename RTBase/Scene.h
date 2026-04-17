@@ -1,11 +1,11 @@
 #pragma once
 
 #include "Core.h"
-#include "Sampling.h"
 #include "Geometry.h"
 #include "Imaging.h"
-#include "Materials.h"
 #include "Lights.h"
+#include "Materials.h"
+#include "Sampling.h"
 
 class Camera {
 public:
@@ -14,8 +14,8 @@ public:
 	Matrix camera;					 // Camera -> World (inverse V)
 	Matrix cameraToView;			 // World -> Camera (V)
 
-	float width = 0;
-	float height = 0;
+	float width = 0.f;
+	float height = 0.f;
 	float Afilm;
 	
 	Vec3 origin;		 // Ray Origin
@@ -26,7 +26,7 @@ public:
 		inverseProjectionMatrix = ProjectionMatrix.invert();
 		width = (float)screenwidth;
 		height = (float)screenheight;
-		float Wlens = (2.0f / ProjectionMatrix.a[1][1]);
+		float Wlens = (2.f / ProjectionMatrix.a[1][1]);
 		float aspect = ProjectionMatrix.a[0][0] / ProjectionMatrix.a[1][1];
 		float Hlens = Wlens * aspect;
 		Afilm = Wlens * Hlens;
@@ -35,8 +35,8 @@ public:
 	void updateView(Matrix V) {
 		camera = V;
 		cameraToView = V.invert();
-		origin = camera.mulPoint(Vec3(0, 0, 0));
-		viewDirection = inverseProjectionMatrix.mulPointAndPerspectiveDivide(Vec3(0, 0, 1));
+		origin = camera.mulPoint(Vec3(0.f, 0.f, 0.f));
+		viewDirection = inverseProjectionMatrix.mulPointAndPerspectiveDivide(Vec3(0.f, 0.f, 1.f));
 		viewDirection = camera.mulVec(viewDirection);
 		viewDirection = viewDirection.normalize();
 	}
@@ -48,7 +48,7 @@ public:
 		float yc = (2.f * (1.f - (y / height))) - 1.f;
 
 		// NDC to Clip Space
-		Vec3 pclip(xc, yc, 0.f);
+		Vec3 pclip(xc, yc, 0.f, 1.f);
 
 		// Clip Space to Camera Space
 		Vec3 dCamera = inverseProjectionMatrix.mulPointAndPerspectiveDivide(pclip);
@@ -61,40 +61,35 @@ public:
 	bool projectOntoCamera(const Vec3& p, float& x, float& y) {
 		Vec3 pview = cameraToView.mulPoint(p);
 		Vec3 pproj = projectionMatrix.mulPointAndPerspectiveDivide(pview);
-		x = (pproj.x + 1.0f) * 0.5f;
-		y = (pproj.y + 1.0f) * 0.5f;
-		if (x < 0 || x > 1.0f || y < 0 || y > 1.0f)
-		{
-			return false;
-		}
+		x = (pproj.x + 1.f) * 0.5f;
+		y = (pproj.y + 1.f) * 0.5f;
+		if (x < 0.f || x > 1.f || y < 0.f || y > 1.f) return false;
 		x = x * width;
-		y = 1.0f - y;
+		y = 1.f - y;
 		y = y * height;
 		return true;
 	}
 };
 
-class Scene
-{
+class Scene {
 public:
 	std::vector<Triangle> triangles;
 	std::vector<BSDF*> materials;
 	std::vector<Light*> lights;
+
 	Light* background = NULL;
 	BVHNode* bvh = NULL;
 	Camera camera;
 	AABB bounds;
-	void build()
-	{
+	
+	void build() {
 		// Add BVH building code here
 		bvh = new BVHNode();
 		bvh->build(triangles);
 		// Do not touch the code below this line!
 		// Build light list
-		for (int i = 0; i < triangles.size(); i++)
-		{
-			if (materials[triangles[i].materialIndex]->isLight())
-			{
+		for (int i = 0; i < triangles.size(); i++) {
+			if (materials[triangles[i].materialIndex]->isLight()) {
 				AreaLight* light = new AreaLight();
 				light->triangle = &triangles[i];
 				light->emission = materials[triangles[i].materialIndex]->emission;
@@ -102,37 +97,48 @@ public:
 			}
 		}
 	}
-	IntersectionData traverse(const Ray& ray)
-	{
+
+	IntersectionData traverse(const Ray& ray) {
 		return bvh->traverse(ray, triangles);
 	}
-	Light* sampleLight(Sampler* sampler, float& pmf) {
+
+	Light* sampleLightUniform(Sampler* sampler, float& pmf) {
 		pmf = 1.f / lights.size();
-		unsigned int index = (unsigned int)floor(sampler->next() * lights.size());
+		unsigned int index = std::min((unsigned int)floor(sampler->next() * lights.size()), (unsigned int)(lights.size() - 1));
 		return lights[index];
 	}
+	
+	Light* sampleLightWeighted(Sampler* sampler, float& pmf) {
+		// Sampled Index
+		unsigned int index = std::min((unsigned int)floor(sampler->next() * lights.size()), (unsigned int)(lights.size() - 1));
+		float totalPower = 0.f;
+		for (int j = 0; j < lights.size(); j++) {
+			totalPower += lights[j]->totalIntegratedPower();
+		}
+		pmf = lights[index]->totalIntegratedPower() / totalPower;
+		return lights[index];
+	}
+
 	// Do not modify any code below this line
-	void init(std::vector<Triangle> meshTriangles, std::vector<BSDF*> meshMaterials, Light* _background)
-	{
-		for (int i = 0; i < meshTriangles.size(); i++)
-		{
+	void init(std::vector<Triangle> meshTriangles, std::vector<BSDF*> meshMaterials, Light* _background) {
+		for (int i = 0; i < meshTriangles.size(); i++) {
 			triangles.push_back(meshTriangles[i]);
 			bounds.extend(meshTriangles[i].vertices[0].p);
 			bounds.extend(meshTriangles[i].vertices[1].p);
 			bounds.extend(meshTriangles[i].vertices[2].p);
 		}
-		for (int i = 0; i < meshMaterials.size(); i++)
-		{
+
+		for (int i = 0; i < meshMaterials.size(); i++) {
 			materials.push_back(meshMaterials[i]);
 		}
+
 		background = _background;
-		if (background->totalIntegratedPower() > 0)
-		{
+		if (background->totalIntegratedPower() > 0) {
 			lights.push_back(background);
 		}
 	}
-	bool visible(const Vec3& p1, const Vec3& p2)
-	{
+	
+	bool visible(const Vec3& p1, const Vec3& p2) {
 		Ray ray;
 		Vec3 dir = p2 - p1;
 		float maxT = dir.length() - (2.0f * EPSILON);
@@ -140,36 +146,30 @@ public:
 		ray.init(p1 + (dir * EPSILON), dir);
 		return bvh->traverseVisible(ray, triangles, maxT);
 	}
-	Colour emit(Triangle* light, ShadingData shadingData, Vec3 wi)
-	{
+
+	Colour emit(Triangle* light, ShadingData shadingData, Vec3 wi) {
 		return materials[light->materialIndex]->emit(shadingData, wi);
 	}
-	ShadingData calculateShadingData(IntersectionData intersection, Ray& ray)
-	{
+
+	ShadingData calculateShadingData(IntersectionData intersection, Ray& ray) {
 		ShadingData shadingData = {};
-		if (intersection.t < FLT_MAX)
-		{
+		if (intersection.t < FLT_MAX) {
 			shadingData.x = ray.at(intersection.t);
 			shadingData.gNormal = triangles[intersection.ID].gNormal();
 			triangles[intersection.ID].interpolateAttributes(intersection.alpha, intersection.beta, intersection.gamma, shadingData.sNormal, shadingData.tu, shadingData.tv);
 			shadingData.bsdf = materials[triangles[intersection.ID].materialIndex];
 			shadingData.wo = -ray.dir;
-			if (shadingData.bsdf->isTwoSided())
-			{
-				if (Dot(shadingData.wo, shadingData.sNormal) < 0)
-				{
+			if (shadingData.bsdf->isTwoSided()) {
+				if (Dot(shadingData.wo, shadingData.sNormal) < 0) {
 					shadingData.sNormal = -shadingData.sNormal;
 				}
-				if (Dot(shadingData.wo, shadingData.gNormal) < 0)
-				{
+				if (Dot(shadingData.wo, shadingData.gNormal) < 0) {
 					shadingData.gNormal = -shadingData.gNormal;
 				}
 			}
 			shadingData.frame.fromVector(shadingData.sNormal);
 			shadingData.t = intersection.t;
-		}
-		else
-		{
+		} else {
 			shadingData.wo = -ray.dir;
 			shadingData.t = intersection.t;
 		}

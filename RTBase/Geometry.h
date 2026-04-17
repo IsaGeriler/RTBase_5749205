@@ -1,7 +1,7 @@
 #pragma once
 
 // For Moller-Trumbore Ray-Triangle Intersect
-#define EPSILON 1e-6f
+#define EPSILON 0.0001
 
 // For BVH (Bounding Volume Hierarchy)
 #define MAXNODE_TRIANGLES 8
@@ -124,7 +124,7 @@ public:
 	}
 
 	Vec3 gNormal() {
-		return (n * (Dot(vertices[0].normal, n) > 0 ? 1.0f : -1.0f));
+		return (n * (Dot(vertices[0].normal, n) > 0 ? 1.f : -1.0f));
 	}
 };
 
@@ -194,7 +194,20 @@ public:
 
 	// Add code here
 	bool rayIntersect(Ray& r, float& t) {
-		return false;
+		Vec3 l = r.o - centre;
+		float b = 2 * Dot(l, r.dir);
+		float c = l.lengthSq() - powf(radius, 2);
+		float dis = powf(b, 2) - c;
+
+		// No solutions
+		if (dis < 0.f) return false;
+
+		// One real solution
+		if (dis == 0.f) t = -b;
+
+		// Two solutions
+		if (dis > 0.f) t = std::min(-b - sqrtf(dis), -b + sqrtf(dis));
+		return true;
 	}
 };
 
@@ -220,8 +233,9 @@ class BVHNode {
 private:
 	bool isLeafNode() const { return l == NULL && r == NULL; }
 
+	// Calculate AABB Bounds
 	void calculateBounds(std::vector<Triangle>& triangles) {
-		for (size_t i = offset; i < offset + num; i++) {
+		for (unsigned int i = offset; i < offset + num; i++) {
 			unsigned int triangleIdx = triangleIndexes[i];
 			bounds.extend(triangles[triangleIdx].vertices[0].p);
 			bounds.extend(triangles[triangleIdx].vertices[1].p);
@@ -229,13 +243,14 @@ private:
 		}
 	}
 
+	// Calculate Binned SAH Split Planes
 	float bestSAHSplitPlane(std::vector<Triangle>& triangles, int& axis, float& splitPos) {
 		float bestCost = FLT_MAX;
 		for (int ax = 0; ax < 3; ax++) {
 			float boundsMin = FLT_MAX;
 			float boundsMax = -FLT_MAX;
 
-			for (size_t i = offset; i < offset + num; i++) {
+			for (unsigned int i = offset; i < offset + num; i++) {
 				boundsMin = std::min(boundsMin, triangles[triangleIndexes[i]].centre()[ax]);
 				boundsMax = std::max(boundsMin, triangles[triangleIndexes[i]].centre()[ax]);
 			}
@@ -244,7 +259,7 @@ private:
 			// Populate bins
 			SAHBins bins[BUILD_BINS];
 			float scale = BUILD_BINS / (boundsMax - boundsMin);
-			for (size_t i = offset; i < offset + num; i++) {
+			for (unsigned int i = offset; i < offset + num; i++) {
 				int triangleIdx = triangleIndexes[i];
 				int binIdx = std::min(BUILD_BINS - 1, (int)((triangles[triangleIdx].centre()[ax] - boundsMin) * scale));
 				
@@ -288,7 +303,8 @@ private:
 		}
 		return bestCost;
 	}
-
+	
+	// Calculate Parent Node SAH cost
 	float calculateUnsplitCost() {
 		Vec3 extent = bounds.max - bounds.min;
 		float parentArea = extent.x * extent.y + extent.x * extent.z + extent.y * extent.z;
@@ -297,10 +313,6 @@ private:
 
 	// Build sub-trees
 	void subdivide(std::vector<Triangle>& triangles) {
-		// Calculate SAH Split Planes
-		int bestAxis = -1;
-		float bestPos = 0.f;
-		
 		int axis;
 		float splitPos;
 		float splitCost = bestSAHSplitPlane(triangles, axis, splitPos);
@@ -358,11 +370,12 @@ public:
 		// Update number of primitives in the root, otherwise subdivide will be immediately terminated
 		offset = 0;
 		num = inputTriangles.size();
+		triangleIndexes.reserve(num);
 
 		// Save the original index positions, for optimising, to perform index swapping
 		// As the inputTriangles contain more data, e.g. material index, it will be more costly
-		for (unsigned int i = 0; i < inputTriangles.size(); i++) {
-			triangleIndexes.push_back(i);
+		for (unsigned int i = 0; i < num; i++) {
+			triangleIndexes.emplace_back(i);
 		}
 
 		// Calculate the root bounds
@@ -379,7 +392,7 @@ public:
 		// If node is leaf, check primitives - Else, check the childs
 		if (isLeafNode()) {
 			float t, u, v;
-			for (size_t i = offset; i < offset + num; i++) {
+			for (unsigned int i = offset; i < offset + num; i++) {
 				if (triangles[triangleIndexes[i]].rayIntersect(ray, t, u, v)) {
 					if (t < intersection.t) {
 						intersection.ID = triangleIndexes[i];
@@ -410,7 +423,7 @@ public:
 
 		if (isLeafNode()) {
 			float u, v;
-			for (size_t i = offset; i < offset + num; i++) {
+			for (unsigned int i = offset; i < offset + num; i++) {
 				// Terminate at the first intersect
 				if (triangles[triangleIndexes[i]].rayIntersect(ray, t, u, v) && t <= maxT) return false;
 			}

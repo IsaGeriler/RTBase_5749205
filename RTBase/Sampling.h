@@ -1,8 +1,9 @@
 #pragma once
 
-#include "Core.h"
-#include <random>
 #include <algorithm>
+#include <random>
+
+#include "Core.h"
 
 class Sampler {
 public:
@@ -54,7 +55,7 @@ public:
 
 	static Vec3 uniformSampleSphere(float r1, float r2) {
 		// Add code here
-		float theta = acos(1.f - 2.f * r1);
+		float theta = acos(1.f - (2.f * r1));
 		float phi = 2.f * M_PI * r2;
 		return SphericalCoordinates::sphericalToWorld(theta, phi);
 	}

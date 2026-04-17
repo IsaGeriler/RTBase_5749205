@@ -1,16 +1,17 @@
 #pragma once
 
-#include "Core.h"
-#include "Sampling.h"
-#include "Geometry.h"
-#include "Imaging.h"
-#include "Materials.h"
-#include "Lights.h"
-#include "Scene.h"
-#include "GamesEngineeringBase.h"
-#include <thread>
 #include <functional>
 #include <mutex>
+#include <thread>
+
+#include "Core.h"
+#include "GamesEngineeringBase.h"
+#include "Geometry.h"
+#include "Imaging.h"
+#include "Lights.h"
+#include "Materials.h"
+#include "Sampling.h"
+#include "Scene.h"
 
 struct ScreenTile {
 	unsigned int tile_x{ 0 }, tile_y{ 0 };
@@ -59,16 +60,17 @@ public:
 		if (shadingData.bsdf->isPureSpecular() == true) {
 			return Colour(0.0f, 0.0f, 0.0f);
 		}
+
 		// Compute direct lighting here
 		// Sample a light
-		float pmf;
-		Light* light = scene->sampleLight(sampler, pmf);
+		float pdf, pmf;
+		Colour emission;
+		Light* light = scene->sampleLightUniform(sampler, pmf);
+		//Light* light = scene->sampleLightWeighted(sampler, pmf);
 
 		// Check if light is area or environment light
 		if (light->isArea()) {
 			// Sample point on light and store returned emission
-			float pdf;
-			Colour emission;
 			Vec3 samplePointOnLight = light->sample(shadingData, sampler, emission, pdf);
 
 			// Calculate Geometry Term
@@ -83,6 +85,16 @@ public:
 				return emission * BSDF * gTerm / (pdf * pmf);
 			}
 			return Colour(0.f, 0.f, 0.f);
+		}
+
+		else {
+			// Sample from light, returns direction instead of point
+			
+			// Evaluate Geometry Term for Environment Maps
+			 
+			// Evaluate Visibility to out-of-scene bounds
+			
+			// Evaluate BSDF, multiply term, and return
 		}
 	}
 
@@ -115,7 +127,7 @@ public:
 			}
 			// Calculate Direct Lighting
 			Colour direct = pathThroughput * computeDirect(shadingData, sampler);
-			if (depth > 10) return direct;
+			if (depth == 10) return direct;
 
 			// Sample Indirect Direction
 			// Vec3 incomingRadiance = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
@@ -123,25 +135,25 @@ public:
 			// incomingRadiance = shadingData.frame.toWorld(incomingRadiance);
 			// Colour indirect = shadingData.bsdf->evaluate(shadingData, wi);
 			
-			Colour indirect;
 			float pdf;
+			Colour indirect;
 			Vec3 wi = shadingData.bsdf->sample(shadingData, sampler, indirect, pdf);
-			r.init(shadingData.x + (wi * EPSILON), wi);
+			Ray indirectRay(shadingData.x + (wi * EPSILON), wi);
 
-			// Update path throughput (multiply with BSDF and cosine)
+			// Update path throughput (multiply with BSDF and cosine, divide by pdf)
 			float cosine = std::max(Dot(wi, shadingData.sNormal), 0.f);
 			pathThroughput = pathThroughput * indirect * cosine / pdf;
 
 			// Apply Russian Roulette
-			if (depth > 3) {
+			if (depth >= 3) {
 				float rrp = std::min(pathThroughput.Lum(), 1.f);
 				if (sampler->next() < rrp) {
 					pathThroughput = pathThroughput / rrp;
-					return direct + pathTraceRecursive(r, pathThroughput, depth + 1, sampler);
+					return direct + pathTraceRecursive(indirectRay, pathThroughput, depth + 1, sampler);
 				}
 				else return direct;
 			}
-			return direct + pathTraceRecursive(r, pathThroughput, depth + 1, sampler);
+			return direct + pathTraceRecursive(indirectRay, pathThroughput, depth + 1, sampler);
 		}
 		return scene->background->evaluate(r.dir) * pathThroughput;
 	}
@@ -169,7 +181,27 @@ public:
 
 	void render() {
 		film->incrementSPP();
+		// Sequential Rendering
+		//for (unsigned int y = 0; y < film->height; y++) {
+		//	for (unsigned int x = 0; x < film->width; x++) {
+		//		//float px = x + 0.5f;
+		//		//float py = y + 0.5f;
+		//		// Path Trace Update
+		//		float px = x + samplers->next();
+		//		float py = y + samplers->next();
+		//		Ray ray = scene->camera.generateRay(px, py);
+		//		//Colour col = viewNormals(ray);
+		//		//Colour col = albedo(ray);
+		//		//Colour col = direct(ray, samplers);
+		//		Colour col = pathTrace(ray, samplers);
+		//		film->splat(px, py, col);
+		//		unsigned char r, g, b;
+		//		film->tonemap(x, y, r, g, b, 2.f);
+		//		canvas->draw(x, y, r, g, b);
+		//	}
+		//}
 
+		// Multithreaded Tiled Rendering
 		std::mutex mtx;
 		std::vector<std::thread> thread_pool;
 		std::atomic<int> atomic_id_counter = 0;
