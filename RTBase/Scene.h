@@ -74,6 +74,7 @@ public:
 class Scene {
 public:
 	std::vector<Triangle> triangles;
+	std::vector<unsigned int> triangleIndexes;
 	std::vector<BSDF*> materials;
 	std::vector<Light*> lights;
 
@@ -85,7 +86,7 @@ public:
 	void build() {
 		// Add BVH building code here
 		bvh = new BVHNode();
-		bvh->build(triangles);
+		bvh->build(triangles, triangleIndexes);
 		// Do not touch the code below this line!
 		// Build light list
 		for (int i = 0; i < triangles.size(); i++) {
@@ -99,7 +100,7 @@ public:
 	}
 
 	IntersectionData traverse(const Ray& ray) {
-		return bvh->traverse(ray, triangles);
+		return bvh->traverse(ray, triangles, triangleIndexes);
 	}
 
 	Light* sampleLightUniform(Sampler* sampler, float& pmf) {
@@ -122,7 +123,10 @@ public:
 	// Do not modify any code below this line
 	void init(std::vector<Triangle> meshTriangles, std::vector<BSDF*> meshMaterials, Light* _background) {
 		for (int i = 0; i < meshTriangles.size(); i++) {
+			// Save the original index positions, for optimising, to perform index swapping in the BVH
+			// As the inputTriangles contain more data, e.g. material index, it will be more costly
 			triangles.push_back(meshTriangles[i]);
+			triangleIndexes.push_back(i);
 			bounds.extend(meshTriangles[i].vertices[0].p);
 			bounds.extend(meshTriangles[i].vertices[1].p);
 			bounds.extend(meshTriangles[i].vertices[2].p);
@@ -144,7 +148,7 @@ public:
 		float maxT = dir.length() - (2.0f * EPSILON);
 		dir = dir.normalize();
 		ray.init(p1 + (dir * EPSILON), dir);
-		return bvh->traverseVisible(ray, triangles, maxT);
+		return bvh->traverseVisible(ray, triangles, triangleIndexes, maxT);
 	}
 
 	Colour emit(Triangle* light, ShadingData shadingData, Vec3 wi) {

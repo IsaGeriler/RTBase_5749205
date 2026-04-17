@@ -2,7 +2,7 @@
 
 ## Current Image of Cornell Box
 
-<img alt="PathTraceLecture" src="Images/LecturePathTrace.png" />
+<img alt="CornellBox" src="Images/PathTraceCornellBox.png" />
 
 ## Overview
 

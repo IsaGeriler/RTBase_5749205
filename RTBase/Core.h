@@ -63,7 +63,6 @@ public:
 	Vec3 operator*(const Vec3 v) const { return Vec3(x * v.x, y * v.y, z * v.z); }
 	Vec3 operator-() const { return Vec3(-x, -y, -z); }
 	
-	float& operator[](int index) { return coords[index]; }
 	float dot(Vec3 v) const { return ((x * v.x) + (y * v.y) + (z * v.z)); }
 	float lengthSq() { return ((x * x) + (y * y) + (z * z)); }
 	float length() { return sqrtf((x * x) + (y * y) + (z * z)); }

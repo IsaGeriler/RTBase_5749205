@@ -1,13 +1,17 @@
 #pragma once
 
 // For Moller-Trumbore Ray-Triangle Intersect
-#define EPSILON 0.0001
+#define EPSILON 0.001f
+#define MOLLER_EPSILON 1e-6f
 
 // For BVH (Bounding Volume Hierarchy)
-#define MAXNODE_TRIANGLES 8
-#define TRAVERSE_COST 1.0f
-#define TRIANGLE_COST 2.0f
-#define BUILD_BINS 32
+#define MAXNODE_TRIANGLES 2
+#define BOUNDS_COST 1.0f
+#define INTERSECT_COST 1.0f
+#define BUILD_BINS 8
+
+#include <utility>
+#include <vector>
 
 #include "Core.h"
 #include "Sampling.h"
@@ -87,7 +91,7 @@ public:
 
 		Vec3 p = Cross(r.dir, _e2);  // Cross(_e2, -r.dir);
 		float det = Dot(_e1, p);
-		if (fabs(det) < EPSILON) return false;  // Ray is parallel to the plane
+		if (fabs(det) < MOLLER_EPSILON) return false;  // Ray is parallel to the plane
 		float invDet = 1.f / det;
 
 		// Cramer's Rule - Using determinant to solve for values 
@@ -222,8 +226,6 @@ struct IntersectionData {
 // Adapted from: https://jacco.ompf2.com/2022/04/13/how-to-build-a-bvh-part-1-basics/
 //				 https://jacco.ompf2.com/2022/04/18/how-to-build-a-bvh-part-2-faster-rays/
 //				 https://jacco.ompf2.com/2022/04/21/how-to-build-a-bvh-part-3-quick-builds/
-std::vector<unsigned int> triangleIndexes;
-
 struct SAHBins {
 	AABB bounds;
 	unsigned int triangleCount = 0;
@@ -234,7 +236,7 @@ private:
 	bool isLeafNode() const { return l == NULL && r == NULL; }
 
 	// Calculate AABB Bounds
-	void calculateBounds(std::vector<Triangle>& triangles) {
+	void calculateBounds(std::vector<Triangle>& triangles, std::vector<unsigned int>& triangleIndexes) {
 		for (unsigned int i = offset; i < offset + num; i++) {
 			unsigned int triangleIdx = triangleIndexes[i];
 			bounds.extend(triangles[triangleIdx].vertices[0].p);
@@ -244,15 +246,16 @@ private:
 	}
 
 	// Calculate Binned SAH Split Planes
-	float bestSAHSplitPlane(std::vector<Triangle>& triangles, int& axis, float& splitPos) {
+	float bestSAHSplitPlane(std::vector<Triangle>& triangles, std::vector<unsigned int>& triangleIndexes, int& axis, float& splitPos) {
 		float bestCost = FLT_MAX;
+		float parentArea = bounds.area();
 		for (int ax = 0; ax < 3; ax++) {
 			float boundsMin = FLT_MAX;
 			float boundsMax = -FLT_MAX;
 
 			for (unsigned int i = offset; i < offset + num; i++) {
-				boundsMin = std::min(boundsMin, triangles[triangleIndexes[i]].centre()[ax]);
-				boundsMax = std::max(boundsMin, triangles[triangleIndexes[i]].centre()[ax]);
+				boundsMin = std::min(boundsMin, triangles[triangleIndexes[i]].centre().coords[ax]);
+				boundsMax = std::max(boundsMax, triangles[triangleIndexes[i]].centre().coords[ax]);
 			}
 			if (boundsMin == boundsMax) continue;
 
@@ -261,8 +264,10 @@ private:
 			float scale = BUILD_BINS / (boundsMax - boundsMin);
 			for (unsigned int i = offset; i < offset + num; i++) {
 				int triangleIdx = triangleIndexes[i];
-				int binIdx = std::min(BUILD_BINS - 1, (int)((triangles[triangleIdx].centre()[ax] - boundsMin) * scale));
-				
+				// Clamp the bin index
+				int binIdx = std::min(BUILD_BINS - 1, (int)((triangles[triangleIdx].centre().coords[ax] - boundsMin) * scale));
+				binIdx = std::max(binIdx, 0);
+
 				bins[binIdx].triangleCount++;
 				bins[binIdx].bounds.extend(triangles[triangleIdx].vertices[0].p);
 				bins[binIdx].bounds.extend(triangles[triangleIdx].vertices[1].p);
@@ -278,22 +283,32 @@ private:
 			for (int i = 0; i < BUILD_BINS - 1; i++) {
 				leftSum += bins[i].triangleCount;
 				leftCount[i] = leftSum;
-				leftBBox.extend(bins[i].bounds.min);
-				leftBBox.extend(bins[i].bounds.max);
-				leftArea[i] = leftBBox.area();
+
+				if (bins[i].triangleCount > 0) {
+					leftBBox.extend(bins[i].bounds.min);
+					leftBBox.extend(bins[i].bounds.max);
+					leftArea[i] = leftBBox.area();
+				} else {
+					leftArea[i] = 0;
+				}
 
 				rightSum += bins[BUILD_BINS - 1 - i].triangleCount;
 				rightCount[BUILD_BINS - 2 - i] = rightSum;
-				rightBBox.extend(bins[BUILD_BINS - 1 - i].bounds.min);
-				rightBBox.extend(bins[BUILD_BINS - 1 - i].bounds.max);
-				rightArea[BUILD_BINS - 2 - i] = rightBBox.area();
+
+				if (bins[BUILD_BINS - 1 - i].triangleCount > 0) {
+					rightBBox.extend(bins[BUILD_BINS - 1 - i].bounds.min);
+					rightBBox.extend(bins[BUILD_BINS - 1 - i].bounds.max);
+					rightArea[BUILD_BINS - 2 - i] = rightBBox.area();
+				} else {
+					rightArea[BUILD_BINS - 2 - i] = 0;
+				}
 			}
 
 			// Calculate SAH cost
 			scale = (boundsMax - boundsMin) / BUILD_BINS;
 			for (int i = 0; i < BUILD_BINS - 1; i++) {
-				// Cost = LeftPrimCount * LeftAABBArea + RightPrimCount * RightAABBArea
-				float cost = leftCount[i] * leftArea[i] + rightCount[i] * rightArea[i];
+				// Csplist = Cbounds + ((LeftAABBArea / ParentAABBArea) * LeftPrimCount * Cisect) + ((RightAABBArea / ParentAABBArea) * RightPrimCount * Cisect)
+				float cost = BOUNDS_COST + ((leftArea[i] / parentArea) * leftCount[i] * INTERSECT_COST) + (rightArea[i] / parentArea) * rightCount[i] * INTERSECT_COST;
 				if (cost < bestCost) {
 					splitPos = boundsMin + scale * (i + 1);
 					axis = ax;
@@ -303,30 +318,30 @@ private:
 		}
 		return bestCost;
 	}
-	
-	// Calculate Parent Node SAH cost
-	float calculateUnsplitCost() {
-		Vec3 extent = bounds.max - bounds.min;
-		float parentArea = extent.x * extent.y + extent.x * extent.z + extent.y * extent.z;
-		return num * parentArea;
-	}
 
 	// Build sub-trees
-	void subdivide(std::vector<Triangle>& triangles) {
-		int axis;
-		float splitPos;
-		float splitCost = bestSAHSplitPlane(triangles, axis, splitPos);
-		float parentCost = calculateUnsplitCost();
+	void subdivide(std::vector<Triangle>& triangles, std::vector<unsigned int>& triangleIndexes) {
+		// Calculate bounds
+		calculateBounds(triangles, triangleIndexes);
+
+		// Recursion termination
+		if (num <= MAXNODE_TRIANGLES) return;
+
+		// SAH Split and Triangle Reordering (on an index array)
+		int axis = -1;
+		float splitPos = -FLT_MAX;
+		float splitCost = bestSAHSplitPlane(triangles, triangleIndexes, axis, splitPos);
+		float parentCost = num * bounds.area();  // Calculate Parent Node SAH cost
 		
 		// Terminate Recursion
-		if (splitCost >= parentCost) return;
+		if (splitCost >= parentCost || axis == -1) return;
 
 		// Reorder Triangles
 		int i = offset;
 		int j = i + num - 1;
 
 		while (i <= j) {
-			if (triangles[triangleIndexes[i]].centre()[axis] < splitPos) i++;
+			if (triangles[triangleIndexes[i]].centre().coords[axis] < splitPos) i++;
 			else std::swap(triangleIndexes[i], triangleIndexes[j--]);
 		}
 
@@ -335,20 +350,18 @@ private:
 
 		// Initialize Child Nodes
 		l = new BVHNode();
+		r = new BVHNode();
+
 		l->offset = offset;
 		l->num = leftCount;
-
-		r = new BVHNode();
+		
 		r->offset = i;
 		r->num = num - leftCount;
 
 		num = 0;
 
-		l->calculateBounds(triangles);
-		r->calculateBounds(triangles);
-
-		l->subdivide(triangles);
-		r->subdivide(triangles);
+		l->subdivide(triangles, triangleIndexes);
+		r->subdivide(triangles, triangleIndexes);
 	}
 public:
 	AABB bounds;
@@ -357,42 +370,36 @@ public:
 	// This can store an offset and number of triangles in a global triangle list for example
 	// But you can store this however you want!
 	unsigned int offset = 0;
-	unsigned char num = 0;
+	unsigned int num = 0;
 	
 	BVHNode() {
 		r = NULL;
 		l = NULL;
 	}
 
-	// Note there are several options for how to implement the build method. Update this as required
-	void build(std::vector<Triangle>& inputTriangles) {
-		// Add BVH building code here
-		// Update number of primitives in the root, otherwise subdivide will be immediately terminated
-		offset = 0;
-		num = inputTriangles.size();
-		triangleIndexes.reserve(num);
-
-		// Save the original index positions, for optimising, to perform index swapping
-		// As the inputTriangles contain more data, e.g. material index, it will be more costly
-		for (unsigned int i = 0; i < num; i++) {
-			triangleIndexes.emplace_back(i);
-		}
-
-		// Calculate the root bounds
-		calculateBounds(inputTriangles);
-		
-		// Subdivide the root
-		subdivide(inputTriangles);
+	~BVHNode() {
+		if (r != NULL) delete r;
+		if (l != NULL) delete l;
 	}
 
-	void traverse(const Ray& ray, const std::vector<Triangle>& triangles, IntersectionData& intersection) {
+	// Note there are several options for how to implement the build method. Update this as required
+	void build(std::vector<Triangle>& inputTriangles, std::vector<unsigned int>& inputTriangleIndexes) {
+		// Add BVH building code here
+		// Update number of primitives in the root, otherwise subdivide will be immediately terminated
+		num = inputTriangleIndexes.size();
+
+		// Recursive BVH Building (by subdividing the root)
+		subdivide(inputTriangles, inputTriangleIndexes);
+	}
+
+	void traverse(const Ray& ray, const std::vector<Triangle>& triangles, const std::vector<unsigned int>& triangleIndexes, IntersectionData& intersection) {
 		// Add BVH Traversal code here
 		// Check Ray-AABB Intersection
 		if (!bounds.rayAABB(ray)) return;
 		// If node is leaf, check primitives - Else, check the childs
 		if (isLeafNode()) {
-			float t, u, v;
 			for (unsigned int i = offset; i < offset + num; i++) {
+				float t, u, v;
 				if (triangles[triangleIndexes[i]].rayIntersect(ray, t, u, v)) {
 					if (t < intersection.t) {
 						intersection.ID = triangleIndexes[i];
@@ -404,19 +411,19 @@ public:
 				}
 			}
 		} else {
-			if (l != NULL) l->traverse(ray, triangles, intersection);
-			if (r != NULL) r->traverse(ray, triangles, intersection);
+			if (l != NULL) l->traverse(ray, triangles, triangleIndexes, intersection);
+			if (r != NULL) r->traverse(ray, triangles, triangleIndexes, intersection);
 		}
 	}
 
-	IntersectionData traverse(const Ray& ray, const std::vector<Triangle>& triangles) {
+	IntersectionData traverse(const Ray& ray, const std::vector<Triangle>& triangles, const std::vector<unsigned int>& triangleIndexes) {
 		IntersectionData intersection;
 		intersection.t = FLT_MAX;
-		traverse(ray, triangles, intersection);
+		traverse(ray, triangles, triangleIndexes, intersection);
 		return intersection;
 	}
 
-	bool traverseVisible(const Ray& ray, const std::vector<Triangle>& triangles, const float maxT) {
+	bool traverseVisible(const Ray& ray, const std::vector<Triangle>& triangles, const std::vector<unsigned int>& triangleIndexes, const float maxT) {
 		// Add visibility code here
 		float t;
 		if (!bounds.rayAABB(ray, t) || t > maxT) return true;
@@ -428,9 +435,9 @@ public:
 				if (triangles[triangleIndexes[i]].rayIntersect(ray, t, u, v) && t <= maxT) return false;
 			}
 			return true;
-		} else {
-			if (l != NULL) l->traverseVisible(ray, triangles, maxT);
-			if (r != NULL) r->traverseVisible(ray, triangles, maxT);
 		}
+		if (l != NULL && !l->traverseVisible(ray, triangles, triangleIndexes, maxT)) return false;
+		if (r != NULL && !r->traverseVisible(ray, triangles, triangleIndexes, maxT)) return false;
+		return true;
 	}
 };

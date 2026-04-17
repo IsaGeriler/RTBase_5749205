@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <functional>
 #include <mutex>
 #include <thread>
@@ -127,7 +128,7 @@ public:
 			}
 			// Calculate Direct Lighting
 			Colour direct = pathThroughput * computeDirect(shadingData, sampler);
-			if (depth == 10) return direct;
+			if (depth >= 10) return direct;
 
 			// Sample Indirect Direction
 			// Vec3 incomingRadiance = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
