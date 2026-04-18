@@ -331,7 +331,7 @@ private:
 		int axis = -1;
 		float splitPos = -FLT_MAX;
 		float splitCost = bestSAHSplitPlane(triangles, triangleIndexes, axis, splitPos);
-		float parentCost = num * bounds.area();  // Calculate Parent Node SAH cost
+		float parentCost = num * INTERSECT_COST;  // Calculate Parent Node SAH cost
 		
 		// Terminate Recursion
 		if (splitCost >= parentCost || axis == -1) return;
