@@ -209,7 +209,7 @@ public:
 		thread_pool.reserve(numProcs);
 
 		unsigned int tile_size = 32;
-		unsigned int tile_count = (unsigned int)(std::ceil(film->width / tile_size) * std::ceil(film->height / tile_size));
+		unsigned int tile_count = (unsigned int)(std::ceil((film->width + tile_size - 1) / tile_size) * std::ceil((film->height + tile_size - 1) / tile_size));
 
 		for (unsigned int i = 0; i < numProcs; ++i) {
 			thread_pool.emplace_back([&]() {
@@ -221,8 +221,8 @@ public:
 					// Initialize ScreenTile structure's attributes
 					{
 						std::lock_guard<std::mutex> lock(mtx);
-						screen_tile.tile_x = (tile_id % (unsigned int)std::ceil(film->width / tile_size)) * tile_size;
-						screen_tile.tile_y = (tile_id / (unsigned int)std::ceil(film->width / tile_size)) * tile_size;
+						screen_tile.tile_x = (tile_id % (unsigned int)std::ceil((film->width + tile_size - 1) / tile_size)) * tile_size;
+						screen_tile.tile_y = (tile_id / (unsigned int)std::ceil((film->width + tile_size - 1) / tile_size)) * tile_size;
 						screen_tile.tile_size = tile_size;
 						screen_tile.is_tile_rendered = false;
 					}

@@ -50,6 +50,10 @@ int main(int argc, char* argv[]) {
 	rt.init(scene, &canvas);
 	bool running = true;
 	GamesEngineeringBase::Timer timer;
+
+	// Extra variable to measure FPS and average frame time in ms
+	float accumulatedTime = 0.f;
+	int framesThisSecond = 0;
 	
 	while (running) {
 		canvas.checkInput();
@@ -91,9 +95,19 @@ int main(int argc, char* argv[]) {
 		timer.reset();
 		rt.render();
 		float t = timer.dt();
+		framesThisSecond += 1;
+		accumulatedTime += t;
 
 		// Write
-		std::cout << t << std::endl;
+		if (accumulatedTime >= 1.f) {
+			// Calculates FPS and Average Frame Time (in milliseconds)
+			printf("FPS: %d | Avg Frame Time: %.2fms (t = %fs)\n", framesThisSecond, (accumulatedTime / framesThisSecond) * 1000.f, t);
+			
+			// Reset for the next second
+			accumulatedTime = 0.f;
+			framesThisSecond = 0;
+		}
+		
 		if (canvas.keyPressed('P')) rt.saveHDR(filename);
 		
 		if (canvas.keyPressed('L')) {
