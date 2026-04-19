@@ -55,7 +55,21 @@ public:
 
 	static Colour fresnelConductor(float cosTheta, Colour ior, Colour k) {
 		// Add code here
-		return Colour(1.0f, 1.0f, 1.0f);
+		// Given cosTheta_i, find sinTheta_i
+		float sinTheta = 1.f - powf(cosTheta, 2);
+		Colour cosTheta_i(cosTheta, cosTheta, cosTheta);
+		Colour sinTheta_i(sinTheta, sinTheta, sinTheta);
+
+		// Return the squared average of perpendicular and parallel
+		Colour fParallel = (
+			(((ior * ior) + (k * k)) * (cosTheta_i * cosTheta_i)) - (ior * 2 * cosTheta_i) + (sinTheta_i) /
+			(((ior * ior) + (k * k)) * (cosTheta_i * cosTheta_i)) + (ior * 2 * cosTheta_i) + (sinTheta_i)
+		);
+		Colour fPerpendicular = (
+			(ior * ior) + (k * k) - (ior * 2 * cosTheta_i) + (cosTheta_i * cosTheta_i) /
+			(ior * ior) + (k * k) + (ior * 2 * cosTheta_i) + (cosTheta_i * cosTheta_i)
+		);
+		return ((fParallel * fParallel) + (fPerpendicular * fPerpendicular)) / 2.f;
 	}
 
 	static float lambdaGGX(Vec3 wi, float alpha) {
