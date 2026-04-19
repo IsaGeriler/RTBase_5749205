@@ -74,7 +74,7 @@ public:
 		e2 = vertices[0].p - vertices[2].p;
 		n = e1.cross(e2).normalize();
 		area = e1.cross(e2).length() * 0.5f;
-		d = -Dot(n, vertices[0].p);
+		d = Dot(n, vertices[0].p);
 	}
 
 	Vec3 centre() const {
@@ -307,7 +307,7 @@ private:
 			// Calculate SAH cost
 			scale = (boundsMax - boundsMin) / BUILD_BINS;
 			for (int i = 0; i < BUILD_BINS - 1; i++) {
-				// Csplist = Cbounds + ((LeftAABBArea / ParentAABBArea) * LeftPrimCount * Cisect) + ((RightAABBArea / ParentAABBArea) * RightPrimCount * Cisect)
+				// Csplit = Cbounds + ((LeftAABBArea / ParentAABBArea) * LeftPrimCount * Cisect) + ((RightAABBArea / ParentAABBArea) * RightPrimCount * Cisect)
 				float cost = BOUNDS_COST + ((leftArea[i] / parentArea) * leftCount[i] * INTERSECT_COST) + (rightArea[i] / parentArea) * rightCount[i] * INTERSECT_COST;
 				if (cost < bestCost) {
 					splitPos = boundsMin + scale * (i + 1);

@@ -66,3 +66,15 @@ public:
 		return 1.f / (4.f * M_PI);
 	}
 };
+
+// Multidimensional Distribution: Tabulated Distribution
+class TabulatedDistribution {
+	static Vec3 sample() {
+		// Sample CDF(v) via binary search
+		// Sample u from CDF(u|v)
+	}
+	
+	static float pdf(const Vec3 v) {
+		// PDF = (F[ui', vj'] / (1/NwNh) (nested loop over w and h) F[ui, vj])
+	}
+};

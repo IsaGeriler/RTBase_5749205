@@ -101,7 +101,7 @@ int main(int argc, char* argv[]) {
 		// Write
 		if (accumulatedTime >= 1.f) {
 			// Calculates FPS and Average Frame Time (in milliseconds)
-			printf("FPS: %d | Avg Frame Time: %.2fms (t = %fs)\n", framesThisSecond, (accumulatedTime / framesThisSecond) * 1000.f, t);
+			printf("FPS: %d (%.2f) | Avg Frame Time: %.2fms (t = %fs)\n", framesThisSecond, 1.f / t, (accumulatedTime / framesThisSecond) * 1000.f, t);
 			
 			// Reset for the next second
 			accumulatedTime = 0.f;

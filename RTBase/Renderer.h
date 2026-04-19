@@ -66,8 +66,7 @@ public:
 		// Sample a light
 		float pdf, pmf;
 		Colour emission;
-		Light* light = scene->sampleLightUniform(sampler, pmf);
-		//Light* light = scene->sampleLightWeighted(sampler, pmf);
+		Light* light = scene->sampleLight(sampler, pmf);
 
 		// Check if light is area or environment light
 		if (light->isArea()) {
@@ -90,12 +89,18 @@ public:
 
 		else {
 			// Sample from light, returns direction instead of point
+			Vec3 wi = light->sampleDirectionFromLight(sampler, pdf);
 			
 			// Evaluate Geometry Term for Environment Maps
+			float gTerm = std::max(Dot(wi, shadingData.sNormal), 0.f);
 			 
 			// Evaluate Visibility to out-of-scene bounds
-			
-			// Evaluate BSDF, multiply term, and return
+			if (true) {
+				// Evaluate BSDF, multiply term, and return
+				Colour BSDF = shadingData.bsdf->evaluate(shadingData, wi);
+				return BSDF * gTerm / pdf;  // emission? pmf?
+			}
+			return Colour(0.f, 0.f, 0.f);
 		}
 	}
 

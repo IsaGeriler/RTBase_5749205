@@ -37,7 +37,20 @@ class ShadingHelper {
 public:
 	static float fresnelDielectric(float cosTheta, float iorInt, float iorExt) {
 		// Add code here
-		return 1.0f;
+		cosTheta = std::max(std::min(cosTheta, 1.f), -1.f);
+
+		// Find eta (depends on direction/shadingData.wo's sign)
+		float eta = (cosTheta < 0.f) ? (iorInt / iorExt) : (iorExt / iorInt);
+		
+		// Given cosTheta_i, calculate cosTheta_t from Snell's Law
+		float sinTheta_i = 1.f - powf(cosTheta, 2);
+		if (powf(eta, 2) * powf(sinTheta_i, 2) > 1.f) return 1.f;  // What if eta^2 sin^2(theta_i) > 1 ?
+		float cosTheta_t = sqrtf(1.f - (powf(eta, 2) * powf(sinTheta_i, 2)));
+		
+		// Return the squared average of perpendicular and parallel
+		float fParallel = (cosTheta - eta * cosTheta_t) / (cosTheta + eta * cosTheta_t);
+		float fPerpendicular = (eta * cosTheta - cosTheta_t) / (eta * cosTheta + cosTheta_t);
+		return (powf(fParallel, 2) + powf(fPerpendicular, 2)) * 0.5f;
 	}
 
 	static Colour fresnelConductor(float cosTheta, Colour ior, Colour k) {
@@ -138,10 +151,15 @@ public:
 
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf) {
 		// Replace this with Mirror sampling code
-		Vec3 woWorld = shadingData.frame.toLocal(shadingData.wo);
-		woWorld.x = -woWorld.x;
-		woWorld.y = -woWorld.y;
-		woWorld = shadingData.frame.toWorld(woWorld);
+		// Convert shadingData.wo to local space
+		Vec3 woLocal = shadingData.frame.toLocal(shadingData.wo);
+
+		// Reflect local x and y
+		woLocal.x = -woLocal.x;
+		woLocal.y = -woLocal.y;
+
+		// Convert back to world space
+		Vec3 woWorld = shadingData.frame.toWorld(woLocal);
 		reflectedColour = evaluate(shadingData, woWorld);
 		pdf = 1.f;
 		return woWorld;

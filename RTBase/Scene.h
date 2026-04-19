@@ -103,20 +103,9 @@ public:
 		return bvh->traverse(ray, triangles, triangleIndexes);
 	}
 
-	Light* sampleLightUniform(Sampler* sampler, float& pmf) {
+	Light* sampleLight(Sampler* sampler, float& pmf) {
 		pmf = 1.f / lights.size();
 		unsigned int index = std::min((unsigned int)floor(sampler->next() * lights.size()), (unsigned int)(lights.size() - 1));
-		return lights[index];
-	}
-	
-	Light* sampleLightWeighted(Sampler* sampler, float& pmf) {
-		// Sampled Index
-		unsigned int index = std::min((unsigned int)floor(sampler->next() * lights.size()), (unsigned int)(lights.size() - 1));
-		float totalPower = 0.f;
-		for (int j = 0; j < lights.size(); j++) {
-			totalPower += lights[j]->totalIntegratedPower();
-		}
-		pmf = lights[index]->totalIntegratedPower() / totalPower;
 		return lights[index];
 	}
 
