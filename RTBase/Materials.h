@@ -83,13 +83,16 @@ public:
 	}
 
 	static float Gggx(Vec3 wi, Vec3 wo, float alpha) {
-		// Add code here
-		return 1.0f;
+		// Assume masking and shadowing are statistically independent
+		// G(wo,wi) = G1(wo,wm) G1(wi,wm)
+		// For GGX (Trowbridge-Reitz) - G1(w) = 1 + 1 / lambda(w)
+		return (1.f / (1.f + lambdaGGX(wo, alpha))) * (1.f / (1.f + lambdaGGX(wi, alpha)));
 	}
 	
 	static float Dggx(Vec3 h, float alpha) {
-		// Add code here
-		return 1.0f;
+		// Isotropic Distribution for GGX (Trowbridge-Reitz)
+		float cosTheta = h.z;
+		return powf(alpha, 2) / (M_PI * powf(powf(cosTheta, 2) * (powf(alpha, 2) - 1) + 1, 2));
 	}
 };
 
