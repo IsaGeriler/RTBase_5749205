@@ -75,8 +75,11 @@ public:
 	}
 
 	static float lambdaGGX(Vec3 wi, float alpha) {
-		// Add code here
-		return 1.0f;
+		// Isotropic Lambda Function for GGX (Trowbridge-Reitz)
+		float cosTheta = wi.z;
+		float sinTheta = sqrtf(1.f - powf(cosTheta, 2));
+		float tanTheta = sinTheta / cosTheta;
+		return (sqrtf(1 + powf(alpha, 2) * powf(tanTheta, 2)) - 1.f) / 2.f;
 	}
 
 	static float Gggx(Vec3 wi, Vec3 wo, float alpha) {
@@ -408,6 +411,7 @@ public:
 	}
 };
 
+// Using Phong Model for PlasticBSDF
 class PlasticBSDF : public BSDF {
 public:
 	Texture* albedo;
@@ -429,11 +433,20 @@ public:
 
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf) {
 		// Replace this with Plastic sampling code
-		Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
-		pdf = wi.z / M_PI;
-		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / M_PI;
-		wi = shadingData.frame.toWorld(wi);
-		return wi;
+		//Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
+		//pdf = wi.z / M_PI;
+		//reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / M_PI;
+		//wi = shadingData.frame.toWorld(wi);
+		//return wi;
+
+		// Sample a lobe
+		float thetaLobe = acosf(powf(sampler->next(), 1.f / (alphaToPhongExponent() + 1)));
+		float phiLobe = 2.f * M_PI * sampler->next();
+		Vec3 wLobe(sinf(thetaLobe) * cosf(phiLobe), sinf(thetaLobe) * sinf(phiLobe), cosf(thetaLobe));
+
+		// Create frame aligned along
+
+		// Rotate
 	}
 
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi) {
