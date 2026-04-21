@@ -40,11 +40,13 @@ public:
 		cosTheta = std::max(std::min(cosTheta, 1.f), -1.f);
 
 		// Find eta (depends on direction/shadingData.wo's sign)
-		float eta = (cosTheta < 0.f) ? (iorInt / iorExt) : (iorExt / iorInt);
+		float eta = (cosTheta > 0.f) ? (iorInt / iorExt) : (iorExt / iorInt);
 		
 		// Given cosTheta_i, calculate cosTheta_t from Snell's Law
-		float sinTheta_i = 1.f - powf(cosTheta, 2);
-		if (powf(eta, 2) * powf(sinTheta_i, 2) > 1.f) return 1.f;  // What if eta^2 sin^2(theta_i) > 1 ?
+		float sinTheta_i = sqrtf(1.f - powf(cosTheta, 2));
+
+		// What if eta^2 * sin^2(theta_i) is greater than one - Total Internal Reflection
+		if (powf(eta, 2) * powf(sinTheta_i, 2) > 1.f) return 1.f;
 		float cosTheta_t = sqrtf(1.f - (powf(eta, 2) * powf(sinTheta_i, 2)));
 		
 		// Return the squared average of perpendicular and parallel
@@ -55,8 +57,8 @@ public:
 
 	static Colour fresnelConductor(float cosTheta, Colour ior, Colour k) {
 		// Add code here
-		// Given cosTheta_i, find sinTheta_i
-		float sinTheta = 1.f - powf(cosTheta, 2);
+		cosTheta = std::max(std::min(cosTheta, 1.f), -1.f);
+		float sinTheta = sqrtf(1.f - powf(cosTheta, 2));
 		Colour cosTheta_i(cosTheta, cosTheta, cosTheta);
 		Colour sinTheta_i(sinTheta, sinTheta, sinTheta);
 
@@ -111,7 +113,6 @@ public:
 
 	virtual float mask(const ShadingData& shadingData) = 0;
 };
-
 
 class DiffuseBSDF : public BSDF {
 public:
@@ -173,15 +174,14 @@ public:
 		woLocal.y = -woLocal.y;
 
 		// Convert back to world space
-		Vec3 woWorld = shadingData.frame.toWorld(woLocal);
-		reflectedColour = evaluate(shadingData, woWorld);
 		pdf = 1.f;
-		return woWorld;
+		reflectedColour = evaluate(shadingData, woLocal);
+		return shadingData.frame.toWorld(woLocal.normalize());
 	}
 
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi) {
 		// Replace this with Mirror evaluation code
-		return albedo->sample(shadingData.tu, shadingData.tv) / Dot(wi, shadingData.sNormal);
+		return albedo->sample(shadingData.tu, shadingData.tv) / fabs(Dot(wi, shadingData.sNormal));
 	}
 
 	float PDF(const ShadingData& shadingData, const Vec3& wi) {
@@ -201,7 +201,6 @@ public:
 		return albedo->sampleAlpha(shadingData.tu, shadingData.tv);
 	}
 };
-
 
 class ConductorBSDF : public BSDF {
 public:
@@ -266,21 +265,41 @@ public:
 	}
 
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf) {
-		// Replace this with Glass sampling code
-		Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
-		pdf = wi.z / M_PI;
-		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / M_PI;
-		wi = shadingData.frame.toWorld(wi);
-		return wi;
+		Vec3 woLocal = shadingData.frame.toLocal(shadingData.wo);
+		float cosTheta = woLocal.z;
+		float IOR = (cosTheta > 0.f) ? (intIOR / extIOR) : (extIOR / intIOR);
+		float fresnelConst = ShadingHelper::fresnelDielectric(cosTheta, intIOR, extIOR);
+
+		if (sampler->next() < fresnelConst) {
+			// Reflect
+			pdf = fresnelConst;
+			Vec3 wr(-woLocal.x, -woLocal.y, woLocal.z);
+			reflectedColour = albedo->sample(shadingData.tu, shadingData.tv);
+			return shadingData.frame.toWorld(wr.normalize());
+		} else {
+			// Refract (Transmit)
+			float sinTheta = sqrtf(1.f - powf(cosTheta, 2));
+			if (powf(IOR * sinTheta, 2) > 1.f) {
+				// Total Internal Reflection
+				pdf = 1.f;
+				Vec3 wr(-woLocal.x, -woLocal.y, woLocal.z);
+				reflectedColour = albedo->sample(shadingData.tu, shadingData.tv);
+				return shadingData.frame.toWorld(wr.normalize());
+			} else {
+				pdf = 1.f - fresnelConst;
+				float wtZ = cosTheta > 0 ? -sqrtf(1.f - powf(sinTheta, 2)) : sqrtf(1.f - powf(sinTheta, 2));
+				Vec3 wt(-woLocal.x * IOR, -woLocal.y * IOR, wtZ);
+				reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) * pdf * IOR * IOR;
+				return shadingData.frame.toWorld(wt.normalize());
+			}
+		}
 	}
 
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi) {
-		// Replace this with Glass evaluation code
-		return albedo->sample(shadingData.tu, shadingData.tv) / M_PI;
+		return Colour(0.f, 0.f, 0.f);
 	}
 
 	float PDF(const ShadingData& shadingData, const Vec3& wi) {
-		// Replace this with GlassPDF
 		return 0.f;
 	}
 
