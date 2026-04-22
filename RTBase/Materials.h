@@ -177,7 +177,7 @@ public:
 
 		// Convert back to world space
 		pdf = 1.f;
-		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / wr.z;
+		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / Dot(wr, shadingData.sNormal);
 		return shadingData.frame.toWorld(wr);
 	}
 
@@ -353,7 +353,7 @@ public:
 			// Reflect
 			pdf = fresnelConst;
 			Vec3 wr(-woLocal.x, -woLocal.y, woLocal.z);
-			reflectedColour = albedo->sample(shadingData.tu, shadingData.tv);
+			reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) * fresnelConst / Dot(wr, shadingData.sNormal);
 			return shadingData.frame.toWorld(wr);
 		} else {
 			// Refract (Transmit)
@@ -362,20 +362,44 @@ public:
 				// Total Internal Reflection
 				pdf = 1.f;
 				Vec3 wr(-woLocal.x, -woLocal.y, woLocal.z);
-				reflectedColour = albedo->sample(shadingData.tu, shadingData.tv);
+				reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / Dot(wr, shadingData.sNormal);
 				return shadingData.frame.toWorld(wr);
 			} else {
 				pdf = 1.f - fresnelConst;
 				float wtZ = cosTheta > 0 ? -sqrtf(1.f - powf(sinTheta, 2)) : sqrtf(1.f - powf(sinTheta, 2));
 				Vec3 wt(-woLocal.x * IOR, -woLocal.y * IOR, wtZ);
-				reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) * pdf * IOR * IOR;
+				reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) * (1.f - fresnelConst) * IOR * IOR / Dot(wt, shadingData.sNormal);
 				return shadingData.frame.toWorld(wt);
 			}
 		}
 	}
 
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi) {
-		return Colour(0.f, 0.f, 0.f);
+		Vec3 wiLocal = shadingData.frame.toLocal(wi);
+		Vec3 woLocal = shadingData.frame.toLocal(shadingData.wo);
+
+		float cosTheta = woLocal.z;
+		float IOR = (cosTheta > 0.f) ? (intIOR / extIOR) : (extIOR / intIOR);
+		float reflectence = ShadingHelper::fresnelDielectric(cosTheta, intIOR, extIOR);
+		float refractance = 1.f - reflectence;
+
+		if (reflectence > refractance) {
+			// Reflect
+			Vec3 wr(-woLocal.x, -woLocal.y, woLocal.z);
+			return albedo->sample(shadingData.tu, shadingData.tv) * reflectence / Dot(wr, shadingData.sNormal);
+		} else {
+			// Refract (Transmit)
+			float sinTheta = std::max(sqrtf(1.f - powf(cosTheta, 2)), 0.f);
+			if (powf(IOR * sinTheta, 2) > 1.f) {
+				// Total Internal Reflection
+				Vec3 wr(-woLocal.x, -woLocal.y, woLocal.z);
+				return albedo->sample(shadingData.tu, shadingData.tv) / Dot(wr, shadingData.sNormal);
+			} else {
+				float wtZ = cosTheta > 0 ? -sqrtf(1.f - powf(sinTheta, 2)) : sqrtf(1.f - powf(sinTheta, 2));
+				Vec3 wt(-woLocal.x * IOR, -woLocal.y * IOR, wtZ);
+				return albedo->sample(shadingData.tu, shadingData.tv) * refractance * IOR * IOR / Dot(wt, shadingData.sNormal);
+			}
+		}
 	}
 
 	float PDF(const ShadingData& shadingData, const Vec3& wi) {
