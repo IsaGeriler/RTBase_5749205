@@ -13,6 +13,17 @@
 // Stop warnings about M_PI being a double
 #pragma warning( disable : 4244)
 
+// Balance Heuristics for MIS (Multiple Importance Sampling)
+float balanceHeuristics(float pj, float pk) {
+	return (pj / (pj + pk));
+}
+
+// Power Heuristics for MIS (Multiple Importance Sampling)
+// Beta is adjustable, but is usually is 2
+float powerHeuristics(float pj, float pk, int beta = 2) {
+	return powf(pj, beta) / (powf(pj, beta) + powf(pk, beta));
+}
+
 class Colour {
 public:
 	float r;

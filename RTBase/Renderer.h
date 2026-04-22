@@ -24,9 +24,23 @@ struct ScreenTile {
 	unsigned int tile_y_start() const { return std::max(static_cast<unsigned int>(0), tile_y); }
 
 	// Get end index of x and y
-	unsigned int tile_x_end(Film* film) const { return std::min(tile_x + tile_size - 1, film->width - 1); }
-	unsigned int tile_y_end(Film* film) const { return std::min(tile_y + tile_size - 1, film->height - 1); }
+	unsigned int tile_x_end(Film* film) const { return std::min(tile_x + tile_size - 2, film->width - 1); }
+	unsigned int tile_y_end(Film* film) const { return std::min(tile_y + tile_size - 2, film->height - 1); }
 };
+
+/*
+*	Notes for handling Denoising part of the assignment
+*	oidn::DeviceRef device = oidn::newDevice();
+*	device.commit();
+*	oidn::FilterRef filter = device.newFilter("RT");
+*	filter.setSharedImage("color", colorBuffer, oidn ::Format::Float3, width, height);
+*	filter.setSharedImage("albedo", albedoBuffer, oidn ::Format::Float3, width, height);
+*	filter.setSharedImage("normal", normalBuffer, oidn ::Format::Float3, width, height);
+*	filter.setSharedImage("output", outputBuffer, oidn ::Format::Float3, width, height);
+*	filter.set("hdr", true );
+*	filter.commit();
+*	filter.execute();
+*/
 
 class RayTracer {
 public:
@@ -82,7 +96,11 @@ public:
 			// V[x(i) <-> x(i+1)] - Binary function, from Ray Tracing
 			if (scene->visible(shadingData.x, samplePointOnLight)) {
 				Colour BSDF = shadingData.bsdf->evaluate(shadingData, wi);
-				return emission * BSDF * gTerm / (pdf * pmf);
+				float bsdfPDF = shadingData.bsdf->PDF(shadingData, wi);
+				float bsdfPDFArea = bsdfPDF * std::max(-Dot(wi, light->normal(shadingData, wi)), 0.f) / surfaceToLight.lengthSq();
+				// float wDirect = balanceHeuristics(pdf, bsdfPDFArea);
+				float wDirect = powerHeuristics(pdf, bsdfPDFArea);
+				return emission * BSDF * gTerm * wDirect / (pdf * pmf);
 			}
 			return Colour(0.f, 0.f, 0.f);
 		}
@@ -148,7 +166,11 @@ public:
 
 			// Update path throughput (multiply with BSDF and cosine, divide by pdf)
 			float cosine = std::max(Dot(wi, shadingData.sNormal), 0.f);
-			pathThroughput = pathThroughput * indirect * cosine / pdf;
+			//float indirectBsdfPDF = shadingData.bsdf->PDF(shadingData, wi);
+			// float indirectBsdfPDFArea = indirectBsdfPDF * std::max(-Dot(wi, light->normal(shadingData, wi)), 0.f);
+			if (shadingData.bsdf->isPureSpecular() == true) pdf = 1.f;
+			//float wIndirect = powerHeuristics(indirectBsdfPDF, pdf);
+			pathThroughput = pathThroughput * indirect * cosine /* wIndirect*/ / pdf;
 
 			// Apply Russian Roulette
 			if (depth >= 3) {
