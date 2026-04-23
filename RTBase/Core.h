@@ -19,7 +19,7 @@ float balanceHeuristics(float pj, float pk) {
 }
 
 // Power Heuristics for MIS (Multiple Importance Sampling)
-// Beta is adjustable, but is usually is 2
+// Beta is adjustable, but is usually 2
 float powerHeuristics(float pj, float pk, int beta = 2) {
 	return powf(pj, beta) / (powf(pj, beta) + powf(pk, beta));
 }

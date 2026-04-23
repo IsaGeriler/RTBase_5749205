@@ -50,7 +50,7 @@ public:
 	static float cosineHemispherePDF(const Vec3 wi) {
 		// Add code here
 		float theta = SphericalCoordinates::sphericalTheta(wi);
-		return cos(theta) / M_PI;
+		return cos(theta) * M_1_PI;
 	}
 
 	static Vec3 uniformSampleSphere(float r1, float r2) {

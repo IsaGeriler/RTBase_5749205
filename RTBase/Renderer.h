@@ -165,10 +165,9 @@ public:
 			Ray indirectRay(shadingData.x + (wi * EPSILON), wi);
 
 			// Update path throughput (multiply with BSDF and cosine, divide by pdf)
-			float cosine = std::max(Dot(wi, shadingData.sNormal), 0.f);
-			//float indirectBsdfPDF = shadingData.bsdf->PDF(shadingData, wi);
+			float cosine = Dot(wi, shadingData.sNormal);
+			// float indirectBsdfPDF = shadingData.bsdf->PDF(shadingData, wi);
 			// float indirectBsdfPDFArea = indirectBsdfPDF * std::max(-Dot(wi, light->normal(shadingData, wi)), 0.f);
-			if (shadingData.bsdf->isPureSpecular() == true) pdf = 1.f;
 			//float wIndirect = powerHeuristics(indirectBsdfPDF, pdf);
 			pathThroughput = pathThroughput * indirect * cosine /* wIndirect*/ / pdf;
 
