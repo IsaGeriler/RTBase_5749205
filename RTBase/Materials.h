@@ -36,19 +36,22 @@ public:
 
 class ShadingHelper {
 public:
+	// Done 100% Sure
 	static float fresnelDielectric(float cosTheta, float iorInt, float iorExt) {
 		// Find eta (depends on direction/shadingData.wo's sign)
 		float cosTheta_i = std::max(std::min(cosTheta, 1.f), -1.f);
-		float eta = (cosTheta_i > 0.f) ? (iorInt / iorExt) : (iorExt / iorInt);
-		if (cosTheta_i < 0.f) cosTheta_i = fabs(cosTheta_i);
+		float eta = iorExt / iorInt;
+		if (cosTheta_i <= 0.f) {
+			eta = 1.f / eta;
+			cosTheta_i = fabs(cosTheta_i);
+		}
 
 		// Given cosTheta_i, calculate cosTheta_t from Snell's Law
 		float sinTheta_i = sqrtf(std::max(1.f - powf(cosTheta_i, 2), 0.f));
 		float sinTheta_t = eta * sinTheta_i;
 
-		// What if sinTheta_t is greater or equal than one
-		// Total Internal Reflection
-		if (powf(sinTheta_t, 2) > 1.f) return 1.f;
+		// What if sinTheta_t is greater or equal than one - Total Internal Reflection
+		if (sinTheta_t >= 1.f) return 1.f;
 		float cosTheta_t = sqrtf(std::max(1.f - powf(sinTheta_t, 2), 0.f));
 		
 		// Return the squared average of perpendicular and parallel
@@ -57,8 +60,9 @@ public:
 		return (powf(fParallel, 2) + powf(fPerpendicular, 2)) * 0.5f;
 	}
 
+	// Done I guess... not so sure
 	static Colour fresnelConductor(float cosTheta, Colour ior, Colour k) {
-		float fCosThetaI = cosTheta;
+		float fCosThetaI = fabs(cosTheta);
 		float fSinThetaI = sqrtf(std::max(1.f - powf(fCosThetaI, 2), 0.f));
 		Colour cosThetaI(fCosThetaI, fCosThetaI, fCosThetaI);
 		Colour sinThetaI(fSinThetaI, fSinThetaI, fSinThetaI);
@@ -75,14 +79,17 @@ public:
 		return (parallelSquared + perpendicularSquared) * 0.5f;
 	}
 
+	// Done 100% Sure
 	static float lambdaGGX(Vec3 wi, float alpha) {
 		// Isotropic Lambda Function for GGX (Trowbridge-Reitz)
 		float cosTheta = wi.z;
 		float sinTheta = sqrtf(std::max(1.f - powf(cosTheta, 2), 0.f));
 		float tanTheta = std::fabs(sinTheta / cosTheta);
-		return (sqrtf(1 + powf(alpha, 2) * powf(tanTheta, 2)) - 1.f) * 0.5f;
+		if (std::isinf(tanTheta)) return 0.f;
+		return (sqrtf(1.f + (powf(alpha, 2) * powf(tanTheta, 2))) - 1.f) * 0.5f;
 	}
 
+	// Done 100% Sure
 	static float Gggx(Vec3 wi, Vec3 wo, float alpha) {
 		// Assume masking and shadowing are statistically independent
 		// G(wo,wi) = G1(wo,wm) G1(wi,wm)
@@ -90,10 +97,10 @@ public:
 		return 1.f / (1.f + lambdaGGX(wo, alpha) + lambdaGGX(wi, alpha));
 	}
 	
+	// Done 100% Sure
 	static float Dggx(Vec3 h, float alpha) {
 		// Isotropic Distribution for GGX (Trowbridge-Reitz)
-		float cosThetaM = h.z;
-		return powf(alpha, 2) / (M_PI * powf(powf(cosThetaM, 2) * (powf(alpha, 2) - 1.f) + 1.f, 2));
+		return powf(alpha, 2) / (M_PI * powf(powf(h.z, 2) * (powf(alpha, 2) - 1.f) + 1.f, 2));
 	}
 };
 
@@ -185,22 +192,20 @@ public:
 		// Reflect x and y
 		Vec3 wr(-woLocal.x, -woLocal.y, woLocal.z);
 
-		// Convert back to world space
-		wr = shadingData.frame.toWorld(wr);
-
 		// BSDF = albedo / Dot(wr, n)
 		// If wr is in local space, Dot(wr, n) = wr.z
-		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / Dot(wr, shadingData.sNormal);
+		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / wr.z;
 
 		// PDF = 1 (Perfect/Specular Reflection)
 		pdf = 1.f;
 
-		return wr;
+		// Convert back to world space
+		return shadingData.frame.toWorld(wr);
 	}
 
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi) {
-		// Vec3 wiLocal = shadingData.frame.toLocal(wi);
-		return albedo->sample(shadingData.tu, shadingData.tv) / wi.z;
+		Vec3 wiLocal = shadingData.frame.toLocal(wi);
+		return albedo->sample(shadingData.tu, shadingData.tv) / wiLocal.z;
 	}
 
 	float PDF(const ShadingData& shadingData, const Vec3& wi) {
@@ -220,6 +225,7 @@ public:
 	}
 };
 
+// Nope...
 class ConductorBSDF : public BSDF {
 public:
 	Texture* albedo;
@@ -236,7 +242,7 @@ public:
 	}
 
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf) {
-		// Sample a random wi
+		// Replace this with OrenNayar sampling code
 		Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
 		pdf = wi.z / M_PI;
 		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / M_PI;
@@ -245,12 +251,12 @@ public:
 	}
 
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi) {
-		// Replace this with Dielectric evaluation code
+		// Replace this with OrenNayar evaluation code
 		return albedo->sample(shadingData.tu, shadingData.tv) / M_PI;
 	}
 
 	float PDF(const ShadingData& shadingData, const Vec3& wi) {
-		// Replace this with Dielectric PDF
+		// Replace this with OrenNayar PDF
 		Vec3 wiLocal = shadingData.frame.toLocal(wi);
 		return SamplingDistributions::cosineHemispherePDF(wiLocal);
 	}
@@ -268,7 +274,7 @@ public:
 	}
 };
 
-// Not sure again... will double check
+// Done 100% Sure
 class GlassBSDF : public BSDF {
 public:
 	Texture* albedo;
@@ -285,7 +291,7 @@ public:
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf) {
 		Vec3 woLocal = shadingData.frame.toLocal(shadingData.wo);
 		float cosTheta = woLocal.z;
-		float IOR = (cosTheta > 0.f) ? (intIOR / extIOR) : (extIOR / intIOR);
+		float IOR = (cosTheta > 0.f) ? (extIOR / intIOR) : (intIOR / extIOR);
 		float fresnelConst = ShadingHelper::fresnelDielectric(cosTheta, intIOR, extIOR);
 
 		if (sampler->next() < fresnelConst) {
@@ -297,7 +303,7 @@ public:
 		} else {
 			// Refract (Transmit)
 			float sinTheta = std::max(sqrtf(1.f - powf(cosTheta, 2)), 0.f);
-			if (powf(IOR * sinTheta, 2) > 1.f) {
+			if (IOR * sinTheta >= 1.f) {
 				// Total Internal Reflection
 				pdf = 1.f;
 				Vec3 wr(-woLocal.x, -woLocal.y, woLocal.z);
@@ -316,7 +322,7 @@ public:
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi) {
 		Vec3 woLocal = shadingData.frame.toLocal(shadingData.wo);
 		float cosTheta = woLocal.z;
-		float IOR = (cosTheta > 0.f) ? (intIOR / extIOR) : (extIOR / intIOR);
+		float IOR = (cosTheta > 0.f) ? (extIOR / intIOR) : (intIOR / extIOR);
 		float reflectence = ShadingHelper::fresnelDielectric(cosTheta, intIOR, extIOR);
 		float refractance = 1.f - reflectence;
 
@@ -327,7 +333,7 @@ public:
 		} else {
 			// Refract (Transmit)
 			float sinTheta = std::max(sqrtf(1.f - powf(cosTheta, 2)), 0.f);
-			if (powf(IOR * sinTheta, 2) > 1.f) {
+			if (IOR * sinTheta >= 1.f) {
 				// Total Internal Reflection
 				Vec3 wr(-woLocal.x, -woLocal.y, woLocal.z);
 				return albedo->sample(shadingData.tu, shadingData.tv) / wr.z;
