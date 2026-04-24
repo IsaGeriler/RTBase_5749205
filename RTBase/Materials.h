@@ -60,7 +60,7 @@ public:
 		return (powf(fParallel, 2) + powf(fPerpendicular, 2)) * 0.5f;
 	}
 
-	// Done I guess... not so sure
+	// Done 100% Sure
 	static Colour fresnelConductor(float cosTheta, Colour ior, Colour k) {
 		float fCosThetaI = fabs(cosTheta);
 		float fSinThetaI = sqrtf(std::max(1.f - powf(fCosThetaI, 2), 0.f));
@@ -69,12 +69,12 @@ public:
 
 		// Return the squared average of perpendicular and parallel
 		Colour parallelSquared = (
-			(((ior * ior) + (k * k)) * (cosThetaI * cosThetaI)) - (ior * 2 * cosThetaI) + (sinThetaI * sinThetaI) /
-			(((ior * ior) + (k * k)) * (cosThetaI * cosThetaI)) + (ior * 2 * cosThetaI) + (sinThetaI * sinThetaI)
+			(((ior * ior + k * k) * (cosThetaI * cosThetaI)) - (ior * 2 * cosThetaI) + (sinThetaI * sinThetaI)) /
+			(((ior * ior + k * k) * (cosThetaI * cosThetaI)) + (ior * 2 * cosThetaI) + (sinThetaI * sinThetaI))
 		);
 		Colour perpendicularSquared = (
-			(ior * ior) + (k * k) - (ior * 2 * cosThetaI) + (cosThetaI * cosThetaI) /
-			(ior * ior) + (k * k) + (ior * 2 * cosThetaI) + (cosThetaI * cosThetaI)
+			(ior * ior + k * k - (ior * 2 * cosThetaI) + (cosThetaI * cosThetaI)) /
+			(ior * ior + k * k + (ior * 2 * cosThetaI) + (cosThetaI * cosThetaI))
 		);
 		return (parallelSquared + perpendicularSquared) * 0.5f;
 	}
@@ -242,23 +242,89 @@ public:
 	}
 
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf) {
-		// Replace this with OrenNayar sampling code
-		Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
-		pdf = wi.z / M_PI;
-		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / M_PI;
-		wi = shadingData.frame.toWorld(wi);
-		return wi;
+		// Convert wo to local space
+		Vec3 wo = shadingData.frame.toLocal(shadingData.wo);
+
+		// If alpha < epsilon, treat as a mirror with Conductor Fresnel
+		if (alpha < EPSILON) {
+			pdf = 1.f;
+			Vec3 wi(-wo.x, -wo.y, wo.z);
+			Colour F = ShadingHelper::fresnelConductor(wi.z, eta, k);
+			reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) * F / wi.z;
+			return shadingData.frame.toWorld(wi);
+		}
+
+		// Sampling an isotropic GGX
+		float r1 = sampler->next();
+		float r2 = sampler->next();
+
+		float thetaM = acosf(sqrtf(((1.f - r1) / (r1 * (powf(alpha, 2) - 1.f) + 1.f))));
+		float phiM = 2.f * M_PI * r2;
+		Vec3 wm = SphericalCoordinates::sphericalToWorld(thetaM, phiM);
+		
+		// Light reflected across microfacet
+		Vec3 wi = -wo + (wm * 2 * Dot(wm, wo));
+
+		// Cook-Torrance BRDF
+		// Masking-Shadowing
+		float G = ShadingHelper::Gggx(wi, wo, alpha);
+
+		// Normal Distribution Function
+		float D = ShadingHelper::Dggx(wm, alpha);
+
+		// Fresnel
+		Colour F = ShadingHelper::fresnelConductor(Dot(wo, wm), eta, k);
+
+		// BRDF
+		float cosThetaO = fabs(wo.z);
+		float cosThetaI = fabs(wi.z);
+		pdf = (D * wm.z) / (4.f * Dot(wo, wm));
+		reflectedColour = (F * G * D) / (4.f * wo.z * wi.z);
+
+		return shadingData.frame.toWorld(wi);
 	}
 
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi) {
-		// Replace this with OrenNayar evaluation code
-		return albedo->sample(shadingData.tu, shadingData.tv) / M_PI;
+		// Convert wo to local space
+		Vec3 wo = shadingData.frame.toLocal(shadingData.wo);
+
+		// Can sample only visible normal from wo
+		if (wo.z < 0.f) {
+			return Colour(0.f, 0.f, 0.f);
+		}
+
+		// If alpha < epsilon, treat as a mirror with Conductor Fresnel
+		if (alpha < EPSILON) {
+			Vec3 wi(-wo.x, -wo.y, wo.z);
+			Colour F = ShadingHelper::fresnelConductor(wi.z, eta, k);
+			return albedo->sample(shadingData.tu, shadingData.tv) * F / wi.z;
+		}
+
+		Vec3 wm = (wi + wo).normalize();
+
+		// Cook-Torrance BRDF
+		// Masking-Shadowing
+		float G = ShadingHelper::Gggx(wi, wo, alpha);
+
+		// Normal Distribution Function
+		float D = ShadingHelper::Dggx(wm, alpha);
+
+		// Fresnel
+		Colour F = ShadingHelper::fresnelConductor(Dot(wo, wm), eta, k);
+
+		// BRDF
+		float cosThetaO = fabs(wo.z);
+		float cosThetaI = fabs(wi.z);
+		return (F * G * D) / (4.f * wo.z * wi.z);
 	}
 
 	float PDF(const ShadingData& shadingData, const Vec3& wi) {
 		// Replace this with OrenNayar PDF
 		Vec3 wiLocal = shadingData.frame.toLocal(wi);
-		return SamplingDistributions::cosineHemispherePDF(wiLocal);
+		Vec3 woLocal = shadingData.frame.toLocal(shadingData.wo);
+		Vec3 wm = (wiLocal + woLocal).normalize();
+		float D = ShadingHelper::Dggx(wm, alpha);
+		return (D * wm.z) / (4.f * Dot(woLocal, wm));
 	}
 
 	bool isPureSpecular() {
