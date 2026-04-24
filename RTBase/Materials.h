@@ -225,7 +225,7 @@ public:
 	}
 };
 
-// Nope...
+// I guess done..? Recheck the math
 class ConductorBSDF : public BSDF {
 public:
 	Texture* albedo;
@@ -428,6 +428,7 @@ public:
 	}
 };
 
+// Implement if time left...
 class DielectricBSDF : public BSDF {
 public:
 	Texture* albedo;
@@ -476,6 +477,7 @@ public:
 	}
 };
 
+// I guess done..? Recheck the math
 class OrenNayarBSDF : public BSDF {
 public:
 	Texture* albedo;
@@ -488,21 +490,49 @@ public:
 	}
 
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf) {
-		// Replace this with OrenNayar sampling code
 		Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
 		pdf = wi.z / M_PI;
-		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / M_PI;
-		wi = shadingData.frame.toWorld(wi);
-		return wi;
+
+		// Convert wo to local space
+		Vec3 wo = shadingData.frame.toLocal(shadingData.wo);
+
+		// Oren-Nayar Approximation Constants
+		float A = 1.f - (powf(sigma, 2) / (2.f * (powf(sigma, 2) + 0.33f)));
+		float B = (0.45f * powf(sigma, 2)) / (powf(sigma, 2) + 0.09f);
+		
+		// Oren-Nayar Approximation
+		float thetaI = SphericalCoordinates::sphericalTheta(wi);
+		float thetaO = SphericalCoordinates::sphericalTheta(wo);
+
+		float phiI = SphericalCoordinates::sphericalPhi(wi);
+		float phiO = SphericalCoordinates::sphericalPhi(wo);
+		
+		float OrenNayar = A + B * std::max(0.f, cosf(phiI - phiO) * sinf(std::max(thetaI, thetaO))) * tanf(std::min(thetaI, thetaO));
+		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) * OrenNayar * M_1_PI;
+		return shadingData.frame.toWorld(wi);
 	}
 
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi) {
-		// Replace this with OrenNayar evaluation code
-		return albedo->sample(shadingData.tu, shadingData.tv) / M_PI;
+		// Convert wo to local space
+		Vec3 wo = shadingData.frame.toLocal(shadingData.wo);
+		Vec3 wiLocal = shadingData.frame.toLocal(wi);
+
+		// Oren-Nayar Approximation Constants
+		float A = 1.f - (powf(sigma, 2) / (2.f * (powf(sigma, 2) + 0.33f)));
+		float B = (0.45f * powf(sigma, 2)) / (powf(sigma, 2) + 0.09f);
+
+		// Oren-Nayar Approximation
+		float thetaI = SphericalCoordinates::sphericalTheta(wiLocal);
+		float thetaO = SphericalCoordinates::sphericalTheta(wo);
+
+		float phiI = SphericalCoordinates::sphericalPhi(wiLocal);
+		float phiO = SphericalCoordinates::sphericalPhi(wo);
+
+		float OrenNayar = A + B * std::max(0.f, cosf(phiI - phiO) * sinf(std::max(thetaI, thetaO))) * tanf(std::min(thetaI, thetaO));
+		return albedo->sample(shadingData.tu, shadingData.tv) * OrenNayar * M_1_PI;
 	}
 
 	float PDF(const ShadingData& shadingData, const Vec3& wi) {
-		// Replace this with OrenNayar PDF
 		Vec3 wiLocal = shadingData.frame.toLocal(wi);
 		return SamplingDistributions::cosineHemispherePDF(wiLocal);
 	}
@@ -520,7 +550,7 @@ public:
 	}
 };
 
-// Using Phong Model for PlasticBSDF, extent to Blinn or LaFortune if time left
+// Implement if time left...
 class PlasticBSDF : public BSDF {
 public:
 	Texture* albedo;
