@@ -265,6 +265,12 @@ public:
 		// Light reflected across microfacet
 		Vec3 wi = -wo + (wm * 2 * Dot(wm, wo));
 
+		if (wm.x == 0.f && wm.y == 0.f && wm.z == 0.f) {
+			pdf = 0.f;
+			reflectedColour = Colour(0.f, 0.f, 0.f);
+			return Vec3(0.f, 0.f, 0.f);
+		}
+
 		// Cook-Torrance BRDF
 		// Masking-Shadowing
 		float G = ShadingHelper::Gggx(wi, wo, alpha);
@@ -276,8 +282,6 @@ public:
 		Colour F = ShadingHelper::fresnelConductor(Dot(wo, wm), eta, k);
 
 		// BRDF
-		float cosThetaO = fabs(wo.z);
-		float cosThetaI = fabs(wi.z);
 		pdf = (D * wm.z) / (4.f * Dot(wo, wm));
 		reflectedColour = (F * G * D) / (4.f * wo.z * wi.z);
 
@@ -300,7 +304,13 @@ public:
 			return albedo->sample(shadingData.tu, shadingData.tv) * F / wi.z;
 		}
 
-		Vec3 wm = (wi + wo).normalize();
+		Vec3 wm = (wi + wo);
+
+		if (wm.x == 0.f && wm.y == 0.f && wm.z == 0.f) {
+			return Colour(0.f, 0.f, 0.f);
+		}
+
+		wm = wm.normalize();
 
 		// Cook-Torrance BRDF
 		// Masking-Shadowing
@@ -322,7 +332,21 @@ public:
 		// Replace this with OrenNayar PDF
 		Vec3 wiLocal = shadingData.frame.toLocal(wi);
 		Vec3 woLocal = shadingData.frame.toLocal(shadingData.wo);
-		Vec3 wm = (wiLocal + woLocal).normalize();
+
+		// Can only sample visible normal from wo
+		if (woLocal.z < 0.f) return 0.f;
+
+		// Treat as a mirror with Conductor Fresnel
+		if (alpha < EPSILON) return 0.f;
+
+		Vec3 wm = (wiLocal + woLocal);
+
+		if (wm.x == 0.f && wm.y == 0.f && wm.z == 0.f) {
+			return 0.f;
+		}
+
+		wm = wm.normalize();
+
 		float D = ShadingHelper::Dggx(wm, alpha);
 		return (D * wm.z) / (4.f * Dot(woLocal, wm));
 	}
@@ -550,7 +574,7 @@ public:
 	}
 };
 
-// Implement if time left...
+// Attempt PhongBSDF...
 class PlasticBSDF : public BSDF {
 public:
 	Texture* albedo;
@@ -585,7 +609,6 @@ public:
 	}
 
 	float PDF(const ShadingData& shadingData, const Vec3& wi) {
-		// Replace this with Dielectric PDF
 		Vec3 wiLocal = shadingData.frame.toLocal(wi);
 		return SamplingDistributions::cosineHemispherePDF(wiLocal);
 	}

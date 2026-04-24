@@ -1,13 +1,4 @@
 ﻿  Main.cpp
-C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Sampling.h(100,19): warning C4267: 'return': conversion from 'size_t' to 'int', possible loss of data
-  (compiling source file 'Main.cpp')
-  
-C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Sampling.h(109,12): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
-  (compiling source file 'Main.cpp')
-  
-C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Sampling.h(135,12): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
-  (compiling source file 'Main.cpp')
-  
 C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Geometry.h(389,34): warning C4267: '=': conversion from 'size_t' to 'unsigned int', possible loss of data
   (compiling source file 'Main.cpp')
   
@@ -24,8 +15,8 @@ C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Renderer.h(240,3
   (compiling source file 'Main.cpp')
   
   Generating code
-  6 of 2077 functions ( 0.3%) were compiled, the rest were copied from previous compilation.
+  1 of 2077 functions (<0.1%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
-    80 functions had inline decision re-evaluated but remain unchanged
+    14 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   RTBase.vcxproj -> C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\x64\Release\RTBase.exe
