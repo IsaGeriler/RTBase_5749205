@@ -5,6 +5,8 @@
 #include <mutex>
 #include <thread>
 
+#include "oidn.hpp"
+
 #include "Core.h"
 #include "GamesEngineeringBase.h"
 #include "Geometry.h"
@@ -28,20 +30,6 @@ struct ScreenTile {
 	unsigned int tile_y_end(Film* film) const { return std::min(tile_y + tile_size - 2, film->height - 1); }
 };
 
-/*
-*	Notes for handling Denoising part of the assignment
-*	oidn::DeviceRef device = oidn::newDevice();
-*	device.commit();
-*	oidn::FilterRef filter = device.newFilter("RT");
-*	filter.setSharedImage("color", colorBuffer, oidn ::Format::Float3, width, height);
-*	filter.setSharedImage("albedo", albedoBuffer, oidn ::Format::Float3, width, height);
-*	filter.setSharedImage("normal", normalBuffer, oidn ::Format::Float3, width, height);
-*	filter.setSharedImage("output", outputBuffer, oidn ::Format::Float3, width, height);
-*	filter.set("hdr", true );
-*	filter.commit();
-*	filter.execute();
-*/
-
 class RayTracer {
 public:
 	Scene* scene;
@@ -50,6 +38,17 @@ public:
 	MTRandom* samplers;
 	std::thread** threads;
 	int numProcs;
+
+	// OIDN
+	oidn::DeviceRef device;
+	oidn::FilterRef filter;
+	oidn::BufferRef colourBuffer;
+	oidn::BufferRef albedoBuffer;
+	oidn::BufferRef normalBuffer;
+	oidn::BufferRef outputBuffer;
+
+	Film* albedoFilm;
+	Film* normalFilm;
 	
 	void init(Scene* _scene, GamesEngineeringBase::Window* _canvas) {
 		scene = _scene;
@@ -63,11 +62,40 @@ public:
 		numProcs = sysInfo.dwNumberOfProcessors;
 		threads = new std::thread * [numProcs];
 		samplers = new MTRandom[numProcs];
+
+		// OIDN
+		device = oidn::newDevice();
+		device.commit();
+
+		colourBuffer = device.newBuffer(scene->camera.width * scene->camera.height * 3 * sizeof(float));
+		albedoBuffer = device.newBuffer(scene->camera.width * scene->camera.height * 3 * sizeof(float));
+		normalBuffer = device.newBuffer(scene->camera.width * scene->camera.height * 3 * sizeof(float));
+		outputBuffer = device.newBuffer(scene->camera.width * scene->camera.height * 3 * sizeof(float));
+
+		filter = device.newFilter("RT");
+		filter.setImage("color", colourBuffer, oidn::Format::Float3, scene->camera.width, scene->camera.height);
+		filter.setImage("albedo", albedoBuffer, oidn::Format::Float3, scene->camera.width, scene->camera.height);
+		filter.setImage("normal", normalBuffer, oidn::Format::Float3, scene->camera.width, scene->camera.height);
+		filter.setImage("output", outputBuffer, oidn::Format::Float3, scene->camera.width, scene->camera.height);
+		filter.set("hdr", true);
+		filter.commit();
+
+		albedoFilm = new Film();
+		albedoFilm->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
+
+		normalFilm = new Film();
+		normalFilm->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
+
 		clear();
 	}
 
 	void clear() {
 		film->clear();
+	}
+
+	void denoise() {
+		// Copy from albedoBuffer to albedoFilm
+		// Copy from normalBuffer to normalFilm 
 	}
 
 	Colour computeDirect(ShadingData shadingData, Sampler* sampler) {
@@ -267,9 +295,10 @@ public:
 								//Colour col = direct(ray, samplers);
 								Colour col = pathTrace(ray, samplers);
 								film->splat(px, py, col);
-								unsigned char r, g, b;
-								film->tonemap(x, y, r, g, b, 2.f);
-								canvas->draw(x, y, r, g, b);
+								denoise();
+								//unsigned char r, g, b;
+								//film->tonemap(x, y, r, g, b, 2.f);
+								//canvas->draw(x, y, r, g, b);
 							}
 						}
 
@@ -286,6 +315,14 @@ public:
 		// Join the threads to ensure work completed
 		for (auto& thread : thread_pool)
 			thread.join();
+
+		for (unsigned int y = 0; y < film->height; y++) {
+			for (unsigned int x = 0; x < film->width; x++) {
+				unsigned char r, g, b;
+				film->tonemap(x, y, r, g, b, 2.f);
+				canvas->draw(x, y, r, g, b);
+			}
+		}
 	}
 
 	int getSPP() {
