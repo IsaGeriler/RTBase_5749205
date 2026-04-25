@@ -144,7 +144,7 @@ public:
 		Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
 
 		// PDF = cos(theta) / pi
-		pdf = (wi.z < 0.f) ? 0.f : wi.z * M_1_PI;
+		pdf = wi.z * M_1_PI;
 
 		// BSDF = albedo / pi
 		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) * M_1_PI;
@@ -619,22 +619,80 @@ public:
 	}
 
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf) {
-		// Replace this with Dielectric sampling code
-		Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
-		pdf = wi.z / M_PI;
-		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / M_PI;
-		wi = shadingData.frame.toWorld(wi);
-		return wi;
+		Vec3 wo = shadingData.frame.toLocal(shadingData.wo);
+		Vec3 wr(-wo.x, -wo.y, wo.z);
+		Vec3 wi;
+
+		// e, ks and kd
+		float cosTheta = wo.z;
+		float e = alphaToPhongExponent();
+		float ks = ShadingHelper::fresnelDielectric(cosTheta, intIOR, extIOR);
+		float kd = 1.f - ks;
+
+		// Random Variables
+		float r1 = sampler->next();
+		float r2 = sampler->next();
+
+		if (sampler->next() < ks) {
+			// Diffuse Material
+			wi = SamplingDistributions::cosineSampleHemisphere(r1, r2);
+		}
+		else {
+			// Glossy Material
+			// Sample lobe
+			float thetaLobe = acosf(powf(r1, 1.f / (e + 1)));
+			float phiLobe = 2 * M_PI * r2;
+			Vec3 wLobe = SphericalCoordinates::sphericalToWorld(thetaLobe, phiLobe);
+
+			// Create a frame along wr
+			Frame Rwr;
+			Rwr.Frame::fromVector(wr);
+
+			// Rotate vector
+			wi = Rwr.toLocal(wLobe);
+		}
+		// PDF
+		pdf = (kd * (wi.z / M_PI)) + (ks * ((e + 1) / (2 * M_PI)) * powf(std::max(Dot(wr, wi), 0.f), e));
+
+		// PhongBSDF = kd * DiffuseBSDF + ks * GlossyBSDF
+		float glossyBSDFEval = ks * ((e + 2) / (2 * M_PI)) * powf(std::max(Dot(wr, wi), 0.f), e);
+		Colour diffuseBSDF = albedo->sample(shadingData.tu, shadingData.tv) * kd / M_PI;
+		Colour glossyBSDF(glossyBSDFEval, glossyBSDFEval, glossyBSDFEval);
+		reflectedColour = diffuseBSDF + glossyBSDF;
+		return shadingData.frame.toWorld(wi);
 	}
 
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi) {
-		// Replace this with Dielectric evaluation code
-		return albedo->sample(shadingData.tu, shadingData.tv) / M_PI;
+		Vec3 wiLocal = shadingData.frame.toLocal(wi);
+		Vec3 woLocal = shadingData.frame.toLocal(shadingData.wo);
+		Vec3 wr(-woLocal.x, -woLocal.y, woLocal.z);
+
+		// e, ks and kd
+		float cosTheta = woLocal.z;
+		float e = alphaToPhongExponent();
+		float ks = ShadingHelper::fresnelDielectric(cosTheta, intIOR, extIOR);
+		float kd = 1.f - ks;
+
+		// PhongBSDF = kd * DiffuseBSDF + ks * GlossyBSDF
+		float glossyBSDFEval = ks * ((e + 2) / (2 * M_PI)) * powf(std::max(Dot(wr, wi), 0.f), e);
+		Colour diffuseBSDF = albedo->sample(shadingData.tu, shadingData.tv) * kd / M_PI;
+		Colour glossyBSDF(glossyBSDFEval, glossyBSDFEval, glossyBSDFEval);
+		return diffuseBSDF + glossyBSDF;
 	}
 
 	float PDF(const ShadingData& shadingData, const Vec3& wi) {
 		Vec3 wiLocal = shadingData.frame.toLocal(wi);
-		return SamplingDistributions::cosineHemispherePDF(wiLocal);
+		Vec3 woLocal = shadingData.frame.toLocal(shadingData.wo);
+		Vec3 wr(-woLocal.x, -woLocal.y, woLocal.z);
+
+		// e, ks and kd
+		float cosTheta = woLocal.z;
+		float e = alphaToPhongExponent();
+		float ks = ShadingHelper::fresnelDielectric(cosTheta, intIOR, extIOR);
+		float kd = 1.f - ks;
+
+		// PDF
+		return (kd * (wi.z / M_PI)) + (ks * ((e + 1) / (2 * M_PI)) * powf(std::max(Dot(wr, wi), 0.f), e));
 	}
 
 	bool isPureSpecular() {

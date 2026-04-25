@@ -125,17 +125,17 @@ public:
 class BoxFilter : public ImageFilter {
 public:
 	float filter(float x, float y) const {
-		if (fabsf(x) < 0.5f && fabs(y) < 0.5f) return 1.f;
+		if (fabsf(x) < 0.5f && fabsf(y) < 0.5f) return 1.f;
 		return 0.f;
 	}
-	int size() const { return 0; }
+	int size() const { return 1; }
 };
 
 class GaussianFilter : public ImageFilter {
 private:
 	float radius, alpha;
 	float separable(float d, float radius, float alpha) const {
-		return powf(M_E, -alpha * powf(d, 2)) - powf(M_E, -alpha * powf(radius, 2));
+		return std::max(0.f, powf(M_E, -alpha * powf(d, 2)) - powf(M_E, -alpha * powf(radius, 2)));
 	}
 public:
 	GaussianFilter(float _radius, float _alpha) : radius(_radius), alpha(_alpha) {}

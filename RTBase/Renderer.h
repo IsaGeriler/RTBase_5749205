@@ -2,6 +2,7 @@
 
 #include <cmath>
 #include <functional>
+#include <iostream>
 #include <mutex>
 #include <thread>
 
@@ -26,15 +27,14 @@ struct ScreenTile {
 	unsigned int tile_y_start() const { return std::max(static_cast<unsigned int>(0), tile_y); }
 
 	// Get end index of x and y
-	unsigned int tile_x_end(Film* film) const { return std::min(tile_x + tile_size - 2, film->width - 1); }
-	unsigned int tile_y_end(Film* film) const { return std::min(tile_y + tile_size - 2, film->height - 1); }
+	unsigned int tile_x_end(Film* film) const { return std::min(tile_x + tile_size - 1, film->width - 1); }
+	unsigned int tile_y_end(Film* film) const { return std::min(tile_y + tile_size - 1, film->height - 1); }
 };
 
 class RayTracer {
 public:
 	Scene* scene;
 	GamesEngineeringBase::Window* canvas;
-	Film* film;
 	MTRandom* samplers;
 	std::thread** threads;
 	int numProcs;
@@ -42,21 +42,22 @@ public:
 	// OIDN
 	oidn::DeviceRef device;
 	oidn::FilterRef filter;
-	oidn::BufferRef colourBuffer;
-	oidn::BufferRef albedoBuffer;
-	oidn::BufferRef normalBuffer;
-	oidn::BufferRef outputBuffer;
+	oidn::BufferRef colourBuf;
+	oidn::BufferRef albedoBuf;
+	oidn::BufferRef normalBuf;
+	oidn::BufferRef outputBuf;
 
-	Film* albedoFilm;
+	Film* film;
 	Film* normalFilm;
+	Film* albedoFilm;
 	
 	void init(Scene* _scene, GamesEngineeringBase::Window* _canvas) {
 		scene = _scene;
 		canvas = _canvas;
 		film = new Film();
-		// film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
-		// film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new GaussianFilter(2.f, 0.5f));
-		film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new MitchellNetravali());
+		film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
+		// film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new GaussianFilter(1.5f, 0.5f));
+		// film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new MitchellNetravali());
 		SYSTEM_INFO sysInfo;
 		GetSystemInfo(&sysInfo);
 		numProcs = sysInfo.dwNumberOfProcessors;
@@ -67,35 +68,38 @@ public:
 		device = oidn::newDevice();
 		device.commit();
 
-		colourBuffer = device.newBuffer(scene->camera.width * scene->camera.height * 3 * sizeof(float));
-		albedoBuffer = device.newBuffer(scene->camera.width * scene->camera.height * 3 * sizeof(float));
-		normalBuffer = device.newBuffer(scene->camera.width * scene->camera.height * 3 * sizeof(float));
-		outputBuffer = device.newBuffer(scene->camera.width * scene->camera.height * 3 * sizeof(float));
+		// Check for errors
+		const char* errorMessage;
+		if (device.getError(errorMessage) != oidn::Error::None) std::cout << "Error: " << errorMessage << std::endl;
+
+		colourBuf = device.newBuffer(film->width * film->height * 3 * sizeof(float));
+		albedoBuf = device.newBuffer(film->width * film->height * 3 * sizeof(float));
+		normalBuf = device.newBuffer(film->width * film->height * 3 * sizeof(float));
+		outputBuf = device.newBuffer(film->width * film->height * 3 * sizeof(float));
 
 		filter = device.newFilter("RT");
-		filter.setImage("color", colourBuffer, oidn::Format::Float3, scene->camera.width, scene->camera.height);
-		filter.setImage("albedo", albedoBuffer, oidn::Format::Float3, scene->camera.width, scene->camera.height);
-		filter.setImage("normal", normalBuffer, oidn::Format::Float3, scene->camera.width, scene->camera.height);
-		filter.setImage("output", outputBuffer, oidn::Format::Float3, scene->camera.width, scene->camera.height);
+		filter.setImage("color", colourBuf, oidn::Format::Float3, film->width, film->height);
+		filter.setImage("albedo", albedoBuf, oidn::Format::Float3, film->width, film->height);
+		filter.setImage("normal", normalBuf, oidn::Format::Float3, film->width, film->height);
+		filter.setImage("output", outputBuf, oidn::Format::Float3, film->width, film->height);
 		filter.set("hdr", true);
 		filter.commit();
 
-		albedoFilm = new Film();
-		albedoFilm->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
-
 		normalFilm = new Film();
 		normalFilm->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
+		// normalFilm->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new GaussianFilter(1.5f, 0.5f));
+		// normalFilm->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new MitchellNetravali());
+
+		albedoFilm = new Film();
+		albedoFilm->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
+		// albedoFilm->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new GaussianFilter(1.5f, 0.5f));
+		// albedoFilm->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new MitchellNetravali());
 
 		clear();
 	}
 
 	void clear() {
 		film->clear();
-	}
-
-	void denoise() {
-		// Copy from albedoBuffer to albedoFilm
-		// Copy from normalBuffer to normalFilm 
 	}
 
 	Colour computeDirect(ShadingData shadingData, Sampler* sampler) {
@@ -126,14 +130,11 @@ public:
 				Colour BSDF = shadingData.bsdf->evaluate(shadingData, wi);
 				float bsdfPDF = shadingData.bsdf->PDF(shadingData, wi);
 				float bsdfPDFArea = bsdfPDF * std::max(-Dot(wi, light->normal(shadingData, wi)), 0.f) / surfaceToLight.lengthSq();
-				// float wDirect = balanceHeuristics(pdf, bsdfPDFArea);
-				float wDirect = powerHeuristics(pdf, bsdfPDFArea);
-				return emission * BSDF * gTerm * wDirect / (pdf * pmf);
+				float w = powerHeuristics(pdf, bsdfPDFArea);
+				return emission * BSDF * gTerm * w / (pdf * pmf);
 			}
 			return Colour(0.f, 0.f, 0.f);
-		}
-
-		else {
+		} else {
 			// Sample from light, returns direction instead of point
 			Vec3 wi = light->sampleDirectionFromLight(sampler, pdf);
 			
@@ -144,7 +145,9 @@ public:
 			if (true) {
 				// Evaluate BSDF, multiply term, and return
 				Colour BSDF = shadingData.bsdf->evaluate(shadingData, wi);
-				return BSDF * gTerm / pdf;  // emission? pmf?
+				float bsdfPDF = shadingData.bsdf->PDF(shadingData, wi);
+				float w = powerHeuristics(pdf, bsdfPDF);
+				return BSDF * gTerm * w / pdf;  // emission? pmf?
 			}
 			return Colour(0.f, 0.f, 0.f);
 		}
@@ -234,6 +237,39 @@ public:
 		return Colour(0.0f, 0.0f, 0.0f);
 	}
 
+	void denoise() {
+		unsigned int pixels = film->width * film->height;
+		float* normalPtr = (float*)normalBuf.getData();
+		for (unsigned int i = 0; i < pixels; i++) {
+			normalPtr[(i * 3)] = normalFilm->film[i].r;
+			normalPtr[(i * 3) + 1] = normalFilm->film[i].g;
+			normalPtr[(i * 3) + 2] = normalFilm->film[i].b;
+		}
+
+		float* albedoPtr = (float*)albedoBuf.getData();
+		for (unsigned int i = 0; i < pixels; i++) {
+			albedoPtr[(i * 3)] = albedoFilm->film[i].r;
+			albedoPtr[(i * 3) + 1] = albedoFilm->film[i].g;
+			albedoPtr[(i * 3) + 2] = albedoFilm->film[i].b;
+		}
+
+		float* colourPtr = (float*)colourBuf.getData();
+		for (unsigned int i = 0; i < pixels; i++) {
+			colourPtr[(i * 3)] = film->film[i].r;
+			colourPtr[(i * 3) + 1] = film->film[i].g;
+			colourPtr[(i * 3) + 2] = film->film[i].b;
+		}
+
+		// Execute Denoising
+		filter.execute();
+		float* outputPtr = (float*)outputBuf.getData();
+		for (unsigned int i = 0; i < pixels; i++) {
+			film->film[i].r = outputPtr[(i * 3)];
+			film->film[i].g = outputPtr[(i * 3) + 1];
+			film->film[i].b = outputPtr[(i * 3) + 2];
+		}
+	}
+
 	void render() {
 		film->incrementSPP();
 		// Sequential Rendering
@@ -290,12 +326,17 @@ public:
 								float px = x + samplers->next();
 								float py = y + samplers->next();
 								Ray ray = scene->camera.generateRay(px, py);
-								//Colour col = viewNormals(ray);
-								//Colour col = albedo(ray);
+								// Denoising
+								Colour col = viewNormals(ray);
+								normalFilm->splat(px, py, col);
+
+								col = albedo(ray);
+								albedoFilm->splat(px, py, col);
+
 								//Colour col = direct(ray, samplers);
-								Colour col = pathTrace(ray, samplers);
+								col = pathTrace(ray, samplers);
 								film->splat(px, py, col);
-								denoise();
+								
 								//unsigned char r, g, b;
 								//film->tonemap(x, y, r, g, b, 2.f);
 								//canvas->draw(x, y, r, g, b);
@@ -315,7 +356,9 @@ public:
 		// Join the threads to ensure work completed
 		for (auto& thread : thread_pool)
 			thread.join();
-
+		
+		// Denoising
+		denoise();
 		for (unsigned int y = 0; y < film->height; y++) {
 			for (unsigned int x = 0; x < film->width; x++) {
 				unsigned char r, g, b;
