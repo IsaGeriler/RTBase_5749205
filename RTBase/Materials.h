@@ -142,18 +142,18 @@ public:
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf) {
 		// Sample wi from Cosine Hemisphere Sampling (in z-up space)
 		Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
-
-		// PDF = cos(theta) / pi
-		pdf = wi.z * M_1_PI;
-
-		// BSDF = albedo / pi
-		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) * M_1_PI;
-
-		// Transform to world
-		return shadingData.frame.toWorld(wi);
+		
+		// Transform to world after sampling
+		wi = shadingData.frame.toWorld(wi);
+		
+		pdf = PDF(shadingData, wi);					  // PDF = cos(theta) / pi
+		reflectedColour = evaluate(shadingData, wi);  // BSDF = albedo / pi
+		return wi;
 	}
 
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi) {
+		Vec3 wiLocal = shadingData.frame.toLocal(wi);
+		if (wiLocal.z <= 0.f) return Colour(0.f, 0.f, 0.f);
 		return albedo->sample(shadingData.tu, shadingData.tv) * M_1_PI;
 	}
 
@@ -192,21 +192,23 @@ public:
 		// Need reflectance in direction wr where w = wo
 		// Reflect x and y
 		Vec3 wr(-woLocal.x, -woLocal.y, woLocal.z);
+		wr = shadingData.frame.toWorld(wr);
 
 		// BSDF = albedo / Dot(wr, n)
 		// If wr is in local space, Dot(wr, n) = wr.z
-		if (wr.z <= 0.f) reflectedColour = Colour(0.f, 0.f, 0.f);
-		else reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / wr.z;
+		// if (wr.z <= 0.f) reflectedColour = Colour(0.f, 0.f, 0.f);
+		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / Dot(wr, shadingData.sNormal);
 
 		// PDF = 1 (Perfect/Specular Reflection)
 		pdf = 1.f;
 
 		// Convert back to world space
-		return shadingData.frame.toWorld(wr);
+		return wr;
 	}
 
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi) {
-		return Colour(0.f, 0.f, 0.f);
+		//return Colour(0.f, 0.f, 0.f);
+		return albedo->sample(shadingData.tu, shadingData.tv) / Dot(wi, shadingData.sNormal);
 	}
 
 	float PDF(const ShadingData& shadingData, const Vec3& wi) {
@@ -708,9 +710,6 @@ public:
 	}
 };
 
-// None of the provided scenes seemed to have LayeredBSDF as a material type when I checked the .json files
-// For that reason, LayeredBSDF will not be implemented in this assignment, unless there's extra time left
-// However, for scenes like Fur Ball (Bitterli), or Curly Hair/Straight Hair (Yuksel), LayeredBSDF's a must
 class LayeredBSDF : public BSDF {
 public:
 	BSDF* base;

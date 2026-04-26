@@ -1,9 +1,12 @@
 #pragma once
 
 #include <algorithm>
+#include <memory>
 #include <random>
+#include <vector>
 
 #include "Core.h"
+#include "Imaging.h"
 
 class Sampler {
 public:
@@ -50,7 +53,7 @@ public:
 	static float cosineHemispherePDF(const Vec3 wi) {
 		// Add code here
 		float theta = SphericalCoordinates::sphericalTheta(wi);
-		return cos(theta) * M_1_PI;
+		return (cos(theta) <= 0.f) ? 0.f : (cos(theta) * M_1_PI);
 	}
 
 	static Vec3 uniformSampleSphere(float r1, float r2) {
@@ -64,5 +67,108 @@ public:
 		// Add code here
 		// Solid Angle PDF
 		return 1.f / (4.f * M_PI);
+	}
+};
+
+// Tabulated Distribution for Environment Mapping
+// Adopted from: https://pbr-book.org/3ed-2018/Monte_Carlo_Integration/Sampling_Random_Variables
+//				 https://pbr-book.org/3ed-2018/Monte_Carlo_Integration/2D_Sampling_with_Multidimensional_Transformations
+class Distribution1D {
+public:
+	// Attributes
+	std::vector<float> func, cdf;
+	float funcInt;
+
+	// Constructor
+	Distribution1D(std::vector<float>& f, int n) : func(f), cdf(n + 1) {
+		// Compute integral of step function at xi
+		cdf[0] = 0.f;
+		for (int i = 1; i < n + 1; i++) {
+			cdf[i] = cdf[i - 1] + func[i - 1] / n;
+		}
+
+		// Transform into CDF
+		funcInt = cdf[n];
+		if (funcInt = 0) {
+			for (int i = 1; i < n + 1; i++) {
+				cdf[i] = (float)i / (float)n;
+			}
+		} else {
+			for (int i = 1; i < n + 1; i++) {
+				cdf[i] /= funcInt;
+			}
+		}
+	}
+
+	// Methods
+	int count() const { return func.size(); }
+	float discretePDF(int index) const { return func[index] / (funcInt * count()); }
+
+	int sampleDiscrete(float u, float& pdf) const {
+		int first = 0;
+		int iter = func.size();
+		// Binary Search
+		while (iter > 0) {
+			int half = iter / 2;
+			int middle = first + half;
+			if (cdf[middle] <= u) {
+				first = middle + 1;
+				iter -= (half + 1);
+			}
+			else iter = half;
+		}
+		int offset = std::max(std::min(iter - 2, first - 1), 0);
+		pdf = discretePDF(offset);
+		return offset;
+	}
+};
+
+class Distribution2D {
+public:
+	// Attributes
+	std::vector<Distribution1D*> pConditionalV;
+	std::unique_ptr<Distribution1D> pMarginal;
+
+	// Constructor
+	Distribution2D(Texture* env) {
+		int width = env->width;
+		int height = env->height;
+		std::vector<float> marginalFunc(height);
+		pConditionalV.resize(width);
+		
+		for (int v = 0; v < height; v++) {
+			std::vector<float> F;
+			for (int u = 0; u < width; u++) {
+				// Incorporate sin(theta) into F[u, v] (Luminance weights) to approximately cancel in denominator!
+				float luminance = env->texels[(v * width) + u].Lum();
+				float sinTheta = (v == 0) ? sin(M_PI * v + 0.5f) : sin(M_PI * v);
+				F.emplace_back(luminance * sinTheta);
+			}
+			pConditionalV[v] = new Distribution1D(F, width);
+			marginalFunc[v] = pConditionalV[v]->funcInt;
+		}
+		pMarginal.reset(new Distribution1D(marginalFunc, height));
+	}
+
+	// Methods
+	void sample(float ux, float uy, float& u, float& v, float& pdf) const {
+		float pdf_uy, pdf_ux;
+		int d1 = pMarginal->sampleDiscrete(uy, pdf_uy);
+		int d0 = pConditionalV[pdf_uy]->sampleDiscrete(ux, pdf_ux);
+		
+		int width = pConditionalV[d1]->count();
+		int height = pMarginal->count();
+
+		// Normalize (u, v) in [0, 1]
+		u = d0 / width;
+		v = d1 / height;
+
+		pdf = pdf_ux + pdf_uy;
+	}
+
+	float pdf(float u, float v) const {
+		int iu = std::min(std::max((int)(u * pConditionalV[0]->count()), 0), pConditionalV[0]->count() - 1);
+		int iv = std::min(std::max((int)(v * pMarginal->count()), 0), pMarginal->count() - 1);
+		return pConditionalV[iv]->func[iu] / pMarginal->funcInt;
 	}
 };
