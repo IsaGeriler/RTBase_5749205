@@ -278,7 +278,7 @@ public:
 
 	void render() {
 		// General Render Function to Select Desired Rendering Method
-		int renderMode = 1;
+		int renderMode = 2;
 		if (renderMode == 0) renderSequential();
 		if (renderMode == 1) renderMultithread();
 		if (renderMode == 2) renderMultithreadDenoise();

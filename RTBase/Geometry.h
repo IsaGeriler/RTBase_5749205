@@ -84,7 +84,7 @@ public:
 	// Add code here
 	bool rayIntersect(const Ray& r, float& t, float& u, float& v) const {
 		// Moller-Trumbore Update
-		// Recalculate the triangle edge coordinates
+		// Recalculate triangle edge coordinates
 		// As Moller-Trumbore requires v (beta) and w (gamma) but we have u (alpha) and v (beta)
 		Vec3 _e1 = vertices[1].p - vertices[0].p;
 		Vec3 _e2 = vertices[2].p - vertices[0].p;
