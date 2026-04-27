@@ -2,7 +2,15 @@
 
 ## Current Image of Cornell Box
 
+Materials: DiffuseBSDF
+
 <img alt="CornellBox" src="Images/PathTraceCornellBox.png" />
+
+## Current Image of Glass of Water
+
+Materials: GlassBSDF, ConductorBSDF, DiffuseBSDF
+
+<img alt="GlassOfWater" src="Images/GlassOfWater.png"/>
 
 ## Overview
 

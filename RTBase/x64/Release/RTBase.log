@@ -17,7 +17,7 @@ C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Sampling.h(109,1
 C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Geometry.h(390,34): warning C4267: '=': conversion from 'size_t' to 'unsigned int', possible loss of data
   (compiling source file 'Main.cpp')
   
-C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Materials.h(471,21): warning C4101: 'pdfRefract': unreferenced local variable
+C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Materials.h(472,21): warning C4101: 'pdfRefract': unreferenced local variable
   (compiling source file 'Main.cpp')
   
 C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Renderer.h(321,30): warning C4018: '<': signed/unsigned mismatch
@@ -27,8 +27,8 @@ C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Renderer.h(380,3
   (compiling source file 'Main.cpp')
   
   Generating code
-  2 of 2244 functions (<0.1%) were compiled, the rest were copied from previous compilation.
+  4 of 2239 functions ( 0.2%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
-    14 functions had inline decision re-evaluated but remain unchanged
+    15 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   RTBase.vcxproj -> C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\x64\Release\RTBase.exe

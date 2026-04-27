@@ -63,8 +63,8 @@ public:
 
 	// Done 100% Sure
 	static Colour fresnelConductor(float cosTheta, Colour ior, Colour k) {
-		float fCosThetaI = cosTheta;
-		float fSinThetaI = sqrtf(1.f - powf(fCosThetaI, 2));
+		float fCosThetaI = std::max(std::min(cosTheta, 1.f), 0.f);
+		float fSinThetaI = sqrtf(std::max(1.f - powf(fCosThetaI, 2), 0.f));
 		Colour cosThetaI(fCosThetaI, fCosThetaI, fCosThetaI);
 		Colour sinThetaI(fSinThetaI, fSinThetaI, fSinThetaI);
 
@@ -80,7 +80,8 @@ public:
 		return (parallelSquared + perpendicularSquared) * 0.5f;
 	}
 
-	// Done 100% Sure
+	// Done 90% Sure
+	// Check sin/cos/tan values
 	static float lambdaGGX(Vec3 wi, float alpha) {
 		// Isotropic Lambda Function for GGX (Trowbridge-Reitz)
 		float cosTheta = wi.z;
@@ -197,8 +198,7 @@ public:
 		// If wr is in local space, Dot(wr, n) = wr.z
 		if (wr.z <= 0.f) reflectedColour = Colour(0.f, 0.f, 0.f);
 		else reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / wr.z;
-		// reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / Dot(wr, shadingData.sNormal);
-
+		
 		// PDF = 1 (Perfect/Specular Reflection)
 		pdf = 1.f;
 
@@ -227,7 +227,7 @@ public:
 	}
 };
 
-// I guess done..? Recheck the math
+// Done 90% Sure
 class ConductorBSDF : public BSDF {
 public:
 	Texture* albedo;
@@ -247,13 +247,19 @@ public:
 		// Convert wo to local space
 		Vec3 wo = shadingData.frame.toLocal(shadingData.wo);
 
+		// Can sample only visible normal from wo
+		if (wo.z <= 0.f) {
+			pdf = 0.f;
+			reflectedColour = Colour(0.f, 0.f, 0.f);
+			return Vec3(0.f, 0.f, 0.f);
+		}
+
 		// If alpha < epsilon, treat as a mirror with Conductor Fresnel
 		if (alpha < EPSILON) {
 			pdf = 1.f;
 			Vec3 wi(-wo.x, -wo.y, wo.z);
 			Colour F = ShadingHelper::fresnelConductor(wi.z, eta, k);
-			if (wi.z <= 0.f) reflectedColour = Colour(0.f, 0.f, 0.f);
-			else reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) * F / wi.z;
+			reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) * F / wi.z;
 			return shadingData.frame.toWorld(wi);
 		}
 
@@ -282,21 +288,21 @@ public:
 		float D = ShadingHelper::Dggx(wm, alpha);
 
 		// Fresnel
-		Colour F = ShadingHelper::fresnelConductor(Dot(wo, wm), eta, k);
+		Colour F = ShadingHelper::fresnelConductor(wo.z, eta, k);
 
 		// BRDF
 		pdf = (D * wm.z) / (4.f * Dot(wo, wm));
 		reflectedColour = (F * G * D) / (4.f * wo.z * wi.z);
-
 		return shadingData.frame.toWorld(wi);
 	}
 
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi) {
-		// Convert wo to local space
+		// Convert to local space
 		Vec3 wo = shadingData.frame.toLocal(shadingData.wo);
+		Vec3 wiLocal = shadingData.frame.toLocal(wi);
 
 		// Can sample only visible normal from wo
-		if (wo.z < 0.f) {
+		if (wo.z <= 0.f) {
 			return Colour(0.f, 0.f, 0.f);
 		}
 
@@ -307,47 +313,43 @@ public:
 			return albedo->sample(shadingData.tu, shadingData.tv) * F / wi.z;
 		}
 
-		Vec3 wm = (wi + wo);
-
+		Vec3 wm = (wiLocal + wo);
 		if (wm.x == 0.f && wm.y == 0.f && wm.z == 0.f) {
 			return Colour(0.f, 0.f, 0.f);
 		}
-
 		wm = wm.normalize();
 
 		// Cook-Torrance BRDF
 		// Masking-Shadowing
-		float G = ShadingHelper::Gggx(wi, wo, alpha);
+		float G = ShadingHelper::Gggx(wiLocal, wo, alpha);
 
 		// Normal Distribution Function
 		float D = ShadingHelper::Dggx(wm, alpha);
 
 		// Fresnel
-		Colour F = ShadingHelper::fresnelConductor(Dot(wo, wm), eta, k);
+		Colour F = ShadingHelper::fresnelConductor(wo.z, eta, k);
 
 		// BRDF
 		float cosThetaO = fabs(wo.z);
 		float cosThetaI = fabs(wi.z);
-		return (F * G * D) / (4.f * wo.z * wi.z);
+		return (F * G * D) / (4.f * wo.z * wiLocal.z);
 	}
 
 	float PDF(const ShadingData& shadingData, const Vec3& wi) {
-		// Replace this with OrenNayar PDF
+		// Convert to local space
 		Vec3 wiLocal = shadingData.frame.toLocal(wi);
 		Vec3 woLocal = shadingData.frame.toLocal(shadingData.wo);
 
 		// Can only sample visible normal from wo
-		if (woLocal.z < 0.f) return 0.f;
+		if (woLocal.z <= 0.f) return 0.f;
 
 		// Treat as a mirror with Conductor Fresnel
 		if (alpha < EPSILON) return 0.f;
 
 		Vec3 wm = (wiLocal + woLocal);
-
 		if (wm.x == 0.f && wm.y == 0.f && wm.z == 0.f) {
 			return 0.f;
 		}
-
 		wm = wm.normalize();
 
 		float D = ShadingHelper::Dggx(wm, alpha);
@@ -367,7 +369,7 @@ public:
 	}
 };
 
-// Done 100% Sure
+// Done 90% Sure
 class GlassBSDF : public BSDF {
 public:
 	Texture* albedo;
@@ -398,7 +400,7 @@ public:
 			// Refraction (Transmission)
 			float sinThetaI = std::max(sqrtf(1.f - powf(cosThetaI, 2)), 0.f);
 			float sin2ThetaT = powf(IOR * sinThetaI, 2);
-			if (sin2ThetaT >= 1.f) {
+			if (sin2ThetaT > 1.f) {
 				// Total Internal Reflection
 				pdf = 1.f;
 				Vec3 wr(-woLocal.x, -woLocal.y, woLocal.z);
@@ -407,7 +409,7 @@ public:
 			} else {
 				pdf = 1.f - fresnel;
 				float cosThetaT = sqrtf(1.f - sin2ThetaT);
-				float wtZ = (woLocal.z > 0) ? -cosThetaT : cosThetaT;
+				float wtZ = (woLocal.z > 0.f) ? -cosThetaT : cosThetaT;
 				Vec3 wt(-woLocal.x * IOR, -woLocal.y * IOR, wtZ);
 				reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) * (1.f - fresnel) * powf(IOR, 2) / wt.z;
 				return shadingData.frame.toWorld(wt);
@@ -527,7 +529,7 @@ public:
 	}
 };
 
-// I guess done..? Recheck the math
+// Recheck the math... 60% Sure
 class OrenNayarBSDF : public BSDF {
 public:
 	Texture* albedo;
@@ -600,7 +602,7 @@ public:
 	}
 };
 
-// Attempt PhongBSDF...
+// Attempt PhongBSDF... 40% Sure
 class PlasticBSDF : public BSDF {
 public:
 	Texture* albedo;
@@ -710,6 +712,8 @@ public:
 	}
 };
 
+// Implement if time left...
+// Use Beer's Law
 class LayeredBSDF : public BSDF {
 public:
 	BSDF* base;
