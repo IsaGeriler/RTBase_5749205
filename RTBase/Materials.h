@@ -192,23 +192,22 @@ public:
 		// Need reflectance in direction wr where w = wo
 		// Reflect x and y
 		Vec3 wr(-woLocal.x, -woLocal.y, woLocal.z);
-		wr = shadingData.frame.toWorld(wr);
 
 		// BSDF = albedo / Dot(wr, n)
 		// If wr is in local space, Dot(wr, n) = wr.z
-		// if (wr.z <= 0.f) reflectedColour = Colour(0.f, 0.f, 0.f);
-		reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / Dot(wr, shadingData.sNormal);
+		if (wr.z <= 0.f) reflectedColour = Colour(0.f, 0.f, 0.f);
+		else reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / wr.z;
+		// reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / Dot(wr, shadingData.sNormal);
 
 		// PDF = 1 (Perfect/Specular Reflection)
 		pdf = 1.f;
 
 		// Convert back to world space
-		return wr;
+		return shadingData.frame.toWorld(wr);
 	}
 
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi) {
-		//return Colour(0.f, 0.f, 0.f);
-		return albedo->sample(shadingData.tu, shadingData.tv) / Dot(wi, shadingData.sNormal);
+		return Colour(0.f, 0.f, 0.f);
 	}
 
 	float PDF(const ShadingData& shadingData, const Vec3& wi) {
@@ -252,8 +251,9 @@ public:
 		if (alpha < EPSILON) {
 			pdf = 1.f;
 			Vec3 wi(-wo.x, -wo.y, wo.z);
-			// Colour F = ShadingHelper::fresnelConductor(wi.z, eta, k);
-			reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) / wi.z;
+			Colour F = ShadingHelper::fresnelConductor(wi.z, eta, k);
+			if (wi.z <= 0.f) reflectedColour = Colour(0.f, 0.f, 0.f);
+			else reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) * F / wi.z;
 			return shadingData.frame.toWorld(wi);
 		}
 

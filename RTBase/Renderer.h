@@ -55,9 +55,9 @@ public:
 		scene = _scene;
 		canvas = _canvas;
 		film = new Film();
-		// film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
+		film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
 		// film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new GaussianFilter(1.5f, 0.5f));
-		film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new MitchellNetravali());
+		// film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new MitchellNetravali());
 		SYSTEM_INFO sysInfo;
 		GetSystemInfo(&sysInfo);
 		numProcs = sysInfo.dwNumberOfProcessors;
@@ -86,15 +86,11 @@ public:
 		filter.commit();
 
 		normalFilm = new Film();
-		// normalFilm->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
-		// normalFilm->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new GaussianFilter(1.5f, 0.5f));
-		normalFilm->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new MitchellNetravali());
-
+		normalFilm->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
+		
 		albedoFilm = new Film();
-		// albedoFilm->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
-		// albedoFilm->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new GaussianFilter(1.5f, 0.5f));
-		albedoFilm->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new MitchellNetravali());
-
+		albedoFilm->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
+		
 		clear();
 	}
 
@@ -192,7 +188,7 @@ public:
 			}
 			// Calculate Direct Lighting
 			Colour direct = pathThroughput * computeDirect(shadingData, sampler);
-			if (depth >= 10) return direct;
+			// if (depth >= 10) return direct;
 
 			// Sample Indirect Direction
 			// Vec3 incomingRadiance = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
@@ -207,14 +203,14 @@ public:
 
 			// Update path throughput (multiply with BSDF and cosine, divide by pdf)
 			float cosine = Dot(wi, shadingData.sNormal);
-			// float indirectBsdfPDF = shadingData.bsdf->PDF(shadingData, wi);
-			// float indirectBsdfPDFArea = indirectBsdfPDF * std::max(-Dot(wi, light->normal(shadingData, wi)), 0.f);
-			// float wIndirect = powerHeuristics(indirectBsdfPDF, pdf);
-			pathThroughput = pathThroughput * indirect * cosine /* wIndirect*/ / pdf;
+			//float indirectBsdfPDF = shadingData.bsdf->PDF(shadingData, wi);
+			//float indirectBsdfPDFArea = indirectBsdfPDF * std::max(Dot(wi, shadingData.x), 0.f);
+			//float wIndirect = powerHeuristics(indirectBsdfPDFArea, pdf);
+			pathThroughput = pathThroughput * indirect * cosine /** wIndirect *// pdf;
 
 			// Apply Russian Roulette
 			if (depth >= 3) {
-				float rrp = std::min(pathThroughput.Lum(), 1.f);
+				float rrp = std::min(pathThroughput.Lum(), 0.995f);
 				if (sampler->next() < rrp) {
 					pathThroughput = pathThroughput / rrp;
 					return direct + pathTraceRecursive(indirectRay, pathThroughput, depth + 1, sampler);
@@ -282,12 +278,13 @@ public:
 
 	void render() {
 		// General Render Function to Select Desired Rendering Method
-		int renderMode = 2;
+		int renderMode = 1;
 		if (renderMode == 0) renderSequential();
 		if (renderMode == 1) renderMultithread();
 		if (renderMode == 2) renderMultithreadDenoise();
 		if (renderMode == 3) renderLightTrace();
 		if (renderMode == 4) renderInstantRadiosity();
+		// if (renderMode == 5) renderPSSMLT();
 	}
 
 	void renderSequential() {

@@ -96,12 +96,13 @@ public:
 
 		// Cramer's Rule - Using determinant to solve for values 
 		Vec3 T = r.o - vertices[0].p;
-		u = Dot(T, p) * invDet;
-		if (u < 0.f || u > 1.f) return false;
+		v = Dot(T, p) * invDet;
+		if (v < 0.f || v > 1.f) return false;
 
 		Vec3 q = Cross(T, _e1);
-		v = Dot(r.dir, q) * invDet;
-		if (v < 0.f || v > 1.f || u + v > 1.f) return false;
+		float w = Dot(r.dir, q) * invDet;
+		if (w < 0.f || w > 1.f || w + v > 1.f) return false;
+		u = 1.f - (v + w);
 
 		t = Dot(_e2, q) * invDet;
 		return t >= 0.f;
