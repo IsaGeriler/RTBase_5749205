@@ -125,7 +125,7 @@ public:
 class BoxFilter : public ImageFilter {
 public:
 	float filter(float x, float y) const {
-		if (fabsf(x) <= 0.5f && fabsf(y) <= 0.5f) return 1.f;
+		if (fabsf(x) < 0.5f && fabsf(y) < 0.5f) return 1.f;
 		return 0.f;
 	}
 	int size() const { return 1; }

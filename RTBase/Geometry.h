@@ -1,7 +1,7 @@
 #pragma once
 
 // For Moller-Trumbore Ray-Triangle Intersect
-#define EPSILON 0.001f
+#define EPSILON 0.0001f
 #define MOLLER_EPSILON 1e-6f
 
 // For BVH (Bounding Volume Hierarchy)

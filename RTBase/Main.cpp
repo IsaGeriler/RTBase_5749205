@@ -118,7 +118,7 @@ int main(int argc, char* argv[]) {
 
 		if (SPP == rt.getSPP()) {
 			rt.saveHDR(filename);
-			break;
+			// break;
 		}
 		canvas.present();
 	}

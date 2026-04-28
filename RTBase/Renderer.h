@@ -54,10 +54,18 @@ public:
 	void init(Scene* _scene, GamesEngineeringBase::Window* _canvas) {
 		scene = _scene;
 		canvas = _canvas;
+
 		film = new Film();
+		film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new MitchellNetravali());
 		// film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
 		// film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new GaussianFilter(1.5f, 0.5f));
-		film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new MitchellNetravali());
+
+		normalFilm = new Film();
+		normalFilm->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
+
+		albedoFilm = new Film();
+		albedoFilm->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
+
 		SYSTEM_INFO sysInfo;
 		GetSystemInfo(&sysInfo);
 		numProcs = sysInfo.dwNumberOfProcessors;
@@ -73,23 +81,17 @@ public:
 		if (device.getError(errorMessage) != oidn::Error::None) std::cout << "Error: " << errorMessage << std::endl;
 
 		colourBuf = device.newBuffer(film->width * film->height * 3 * sizeof(float));
-		albedoBuf = device.newBuffer(film->width * film->height * 3 * sizeof(float));
-		normalBuf = device.newBuffer(film->width * film->height * 3 * sizeof(float));
+		albedoBuf = device.newBuffer(albedoFilm->width * albedoFilm->height * 3 * sizeof(float));
+		normalBuf = device.newBuffer(normalFilm->width * normalFilm->height * 3 * sizeof(float));
 		outputBuf = device.newBuffer(film->width * film->height * 3 * sizeof(float));
 
 		filter = device.newFilter("RT");
 		filter.setImage("color", colourBuf, oidn::Format::Float3, film->width, film->height);
-		filter.setImage("albedo", albedoBuf, oidn::Format::Float3, film->width, film->height);
-		filter.setImage("normal", normalBuf, oidn::Format::Float3, film->width, film->height);
+		filter.setImage("albedo", albedoBuf, oidn::Format::Float3, albedoFilm->width, albedoFilm->height);
+		filter.setImage("normal", normalBuf, oidn::Format::Float3, normalFilm->width, normalFilm->height);
 		filter.setImage("output", outputBuf, oidn::Format::Float3, film->width, film->height);
 		filter.set("hdr", true);
 		filter.commit();
-
-		normalFilm = new Film();
-		normalFilm->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
-		
-		albedoFilm = new Film();
-		albedoFilm->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
 		
 		clear();
 	}
@@ -146,13 +148,17 @@ public:
 			 
 			// Evaluate Visibility to out-of-scene bounds
 			if (scene->visible(shadingData.x + (wi * EPSILON), shadingData.x + (wi * use<SceneBounds>().sceneRadius))) {
-				// Evaluate BSDF, multiply term, and return
+				// Calculate BSDF
 				Colour BSDF = shadingData.bsdf->evaluate(shadingData, wi);
+				
+				// Calculate Weight for MIS (Power Heuristic)
 				float bsdfPDF = shadingData.bsdf->PDF(shadingData, wi);
 				float cosTheta = Dot(wi, shadingData.sNormal);
 				float pLight = pdf * pmf;
 				float pBsdf = bsdfPDF * gTerm / cosTheta;
 				float w = powerHeuristics(pLight, pBsdf, 2);
+				
+				// Return the integral
 				return emission * BSDF * gTerm * w / pLight;
 			}
 			return Colour(0.f, 0.f, 0.f);

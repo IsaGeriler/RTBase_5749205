@@ -1,5 +1,7 @@
 #pragma once
 
+#include <chrono>
+
 #include "Core.h"
 #include "Geometry.h"
 #include "Imaging.h"
@@ -18,7 +20,7 @@ public:
 	float height = 0.f;
 	float Afilm;
 	
-	Vec3 origin;		 // Ray Origin
+	Vec3 origin;					 // Ray Origin
 	Vec3 viewDirection;
 	
 	void init(Matrix ProjectionMatrix, int screenwidth, int screenheight) {
@@ -85,8 +87,11 @@ public:
 	
 	void build() {
 		// Add BVH building code here
+		auto start = std::chrono::high_resolution_clock::now();
 		bvh = new BVHNode();
 		bvh->build(triangles, triangleIndexes);
+		auto end = std::chrono::high_resolution_clock::now();
+		std::cout << "BVH Build Time: " << std::chrono::duration<double, std::milli>(end - start).count() << "ms\n";
 		// Do not touch the code below this line!
 		// Build light list
 		for (int i = 0; i < triangles.size(); i++) {

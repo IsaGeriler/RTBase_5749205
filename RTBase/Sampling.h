@@ -83,18 +83,18 @@ public:
 	Distribution1D(std::vector<float>& f, int n) : func(f), cdf(n + 1) {
 		// Compute integral of step function at xi
 		cdf[0] = 0.f;
-		for (int i = 1; i < n + 1; i++) {
+		for (int i = 1; i < n + 1; ++i) {
 			cdf[i] = cdf[i - 1] + func[i - 1] / n;
 		}
 
 		// Transform into CDF
 		funcInt = cdf[n];
-		if (funcInt = 0) {
-			for (int i = 1; i < n + 1; i++) {
+		if (funcInt == 0) {
+			for (int i = 1; i < n + 1; ++i) {
 				cdf[i] = (float)i / (float)n;
 			}
 		} else {
-			for (int i = 1; i < n + 1; i++) {
+			for (int i = 1; i < n + 1; ++i) {
 				cdf[i] /= funcInt;
 			}
 		}
@@ -104,9 +104,11 @@ public:
 	int count() const { return func.size(); }
 	float discretePDF(int index) const { return func[index] / (funcInt * count()); }
 
-	int sampleDiscrete(float u, float& pdf) const {
+	int sampleDiscrete(float &u, float& pdf) const {
+		// Find surrounding CDF segments and offset
 		int first = 0;
-		int iter = func.size();
+		int size = cdf.size();
+		int iter = size;
 		// Binary Search
 		while (iter > 0) {
 			int half = iter / 2;
@@ -117,7 +119,7 @@ public:
 			}
 			else iter = half;
 		}
-		int offset = std::max(std::min(iter - 2, first - 1), 0);
+		int offset = std::max(std::min(size - 2, first - 1), 0);
 		pdf = discretePDF(offset);
 		return offset;
 	}
@@ -139,9 +141,10 @@ public:
 		for (int v = 0; v < height; v++) {
 			std::vector<float> F;
 			for (int u = 0; u < width; u++) {
-				// Incorporate sin(theta) into F[u, v] (Luminance weights) to approximately cancel in denominator!
+				// Incorporate sin into Luminance weights to approximately cancel in denominator!
 				float luminance = env->texels[(v * width) + u].Lum();
-				float sinTheta = (v == 0) ? sin(M_PI * v + 0.5f) : sin(M_PI * v);
+				// Normalize, adding with 0.5 because v starts at 0 (and will over-shoot whites)
+				float sinTheta = sin(M_PI * ((v + 0.5f) / height));
 				F.emplace_back(luminance * sinTheta);
 			}
 			pConditionalV[v] = new Distribution1D(F, width);
@@ -151,19 +154,23 @@ public:
 	}
 
 	// Methods
-	void sample(float ux, float uy, float& u, float& v, float& pdf) const {
-		float pdf_uy, pdf_ux;
-		int d1 = pMarginal->sampleDiscrete(uy, pdf_uy);
-		int d0 = pConditionalV[pdf_uy]->sampleDiscrete(ux, pdf_ux);
+	// In Distribution1D, we sample from a discrete set
+	// However, Distribution2D contains continuous set
+	// Have to convert our pdfs accordingly
+	void sample(float ru, float rv, float& u, float& v, float& pdf) const {
+		float pdfu, pdfv;
+		int dv = pMarginal->sampleDiscrete(rv, pdfv);
+		int du = pConditionalV[dv]->sampleDiscrete(ru, pdfu);
 		
-		int width = pConditionalV[d1]->count();
+		int width = pConditionalV[dv]->count();
 		int height = pMarginal->count();
 
-		// Normalize (u, v) in [0, 1]
-		u = d0 / width;
-		v = d1 / height;
-
-		pdf = pdf_ux + pdf_uy;
+		// Normalize (u, v) in [0, 1] range
+		// If we don't sum up with the sampled random numbers,
+		// the lighting will over-shoot white colour/light only
+		u = (du + ru) / width;
+		v = (dv + rv) / height;
+		pdf = (pdfu * width) * (pdfv * height);
 	}
 
 	float pdf(float u, float v) const {
