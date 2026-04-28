@@ -3,6 +3,7 @@
 ## Current Image of Cornell Box
 
 Materials: DiffuseBSDF
+
 Lighting: Area Light
 
 <img alt="CornellBox" src="Images/PathTraceCornellBox.png" />
@@ -10,6 +11,7 @@ Lighting: Area Light
 ## Current Image of Glass of Water
 
 Materials: ConductorBSDF, DiffuseBSDF, GlassBSDF
+
 Lighting: Area Light
 
 <img alt="GlassOfWater" src="Images/GlassOfWater.png"/>
@@ -17,6 +19,7 @@ Lighting: Area Light
 ## Current Image of Materials Scene
 
 Materials: ConductorBSDF, DiffuseBSDF, GlassBSDF, MirrorBSDF, OrenNayarBSDF, PlasticBSDF
+
 Lighting: Environment Lighting
 
 <img alt="GlassOfWater" src="Images/MaterialsSceneEnvMap.png"/>

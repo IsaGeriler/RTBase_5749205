@@ -104,7 +104,7 @@ public:
 	int count() const { return func.size(); }
 	float discretePDF(int index) const { return func[index] / (funcInt * count()); }
 
-	int sampleDiscrete(float &u, float& pdf) const {
+	int sampleDiscrete(float u, float& pdf) const {
 		// Find surrounding CDF segments and offset
 		int first = 0;
 		int size = cdf.size();
