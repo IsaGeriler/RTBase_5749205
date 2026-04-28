@@ -125,7 +125,7 @@ public:
 class BoxFilter : public ImageFilter {
 public:
 	float filter(float x, float y) const {
-		if (fabsf(x) < 0.5f && fabsf(y) < 0.5f) return 1.f;
+		if (fabsf(x) <= 0.5f && fabsf(y) <= 0.5f) return 1.f;
 		return 0.f;
 	}
 	int size() const { return 1; }
@@ -142,7 +142,7 @@ public:
 	float filter(float x, float y) const {
 		return separable(x, radius, alpha) * separable(y, radius, alpha);
 	}
-	int size() const { return 0; }
+	int size() const { return (int)(ceil(radius)); }
 };
 
 class MitchellNetravali : public ImageFilter {
@@ -150,7 +150,7 @@ private:
 	float B = 1.f / 3.f;
 	float C = 1.f / 3.f;
 
-	float separable(float d, float radius = 2.f) const {
+	float separable(float d) const {
 		if (fabs(d) >= 0.f && fabs(d) < 1.f) {
 			return (1.f / 6.f) * (12 - 9 * B - 6 * C) * powf(fabs(d), 3) +
 				   (-18 + 12 * B + 6 * C) * powf(fabs(d), 2) +
@@ -211,13 +211,13 @@ public:
 	void tonemap(int x, int y, unsigned char& r, unsigned char& g, unsigned char& b, float exposure = 1.f) {
 		// Return a tonemapped pixel at coordinates x, y
 		// Tonemap Operator: Uncharted 2 - John Hable
-		Colour col = film[(y * width) + x] / (float) SPP;
+		Colour col = (SPP > 0) ? film[(y * width) + x] / (float) SPP : film[(y * width) + x];
 		col.r = powf(uncharted_hable(col.r * exposure) / uncharted_hable(11.2f), 1.f / 2.2f);
 		col.g = powf(uncharted_hable(col.g * exposure) / uncharted_hable(11.2f), 1.f / 2.2f);
 		col.b = powf(uncharted_hable(col.b * exposure) / uncharted_hable(11.2f), 1.f / 2.2f);
-		r = std::max(0.f, std::min(col.r, 1.f)) * 255;
-		g = std::max(0.f, std::min(col.g, 1.f)) * 255;
-		b = std::max(0.f, std::min(col.b, 1.f)) * 255;
+		r = (unsigned char)(std::max(0.f, std::min(col.r, 1.f)) * 255);
+		g = (unsigned char)(std::max(0.f, std::min(col.g, 1.f)) * 255);
+		b = (unsigned char)(std::max(0.f, std::min(col.b, 1.f)) * 255);
 	}
 
 	// Do not change any code below this line
@@ -239,7 +239,7 @@ public:
 	void save(std::string filename) {
 		Colour* hdrpixels = new Colour[width * height];
 		for (unsigned int i = 0; i < (width * height); i++) {
-			hdrpixels[i] = film[i] / (float)SPP;
+			hdrpixels[i] = (SPP > 0) ? film[i] : film[i] / (float)SPP;
 		}
 		stbi_write_hdr(filename.c_str(), width, height, 3, (float*)hdrpixels);
 		delete[] hdrpixels;

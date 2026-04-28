@@ -1,31 +1,31 @@
 ﻿  Main.cpp
-C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Imaging.h(198,23): warning C4018: '<': signed/unsigned mismatch
+C:\dev\VisualStudio\WM9M3\RTBase\Imaging.h(198,23): warning C4018: '<': signed/unsigned mismatch
   (compiling source file 'Main.cpp')
   
-C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Imaging.h(198,48): warning C4018: '<': signed/unsigned mismatch
+C:\dev\VisualStudio\WM9M3\RTBase\Imaging.h(198,48): warning C4018: '<': signed/unsigned mismatch
   (compiling source file 'Main.cpp')
   
-C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Imaging.h(206,21): warning C4018: '<': signed/unsigned mismatch
+C:\dev\VisualStudio\WM9M3\RTBase\Imaging.h(206,21): warning C4018: '<': signed/unsigned mismatch
   (compiling source file 'Main.cpp')
   
-C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Sampling.h(104,38): warning C4267: 'return': conversion from 'size_t' to 'int', possible loss of data
+C:\dev\VisualStudio\WM9M3\RTBase\Sampling.h(104,38): warning C4267: 'return': conversion from 'size_t' to 'int', possible loss of data
   (compiling source file 'Main.cpp')
   
-C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Sampling.h(110,12): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+C:\dev\VisualStudio\WM9M3\RTBase\Sampling.h(110,12): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
   (compiling source file 'Main.cpp')
   
-C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Geometry.h(390,34): warning C4267: '=': conversion from 'size_t' to 'unsigned int', possible loss of data
+C:\dev\VisualStudio\WM9M3\RTBase\Geometry.h(390,34): warning C4267: '=': conversion from 'size_t' to 'unsigned int', possible loss of data
   (compiling source file 'Main.cpp')
   
-C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Renderer.h(327,30): warning C4018: '<': signed/unsigned mismatch
+C:\dev\VisualStudio\WM9M3\RTBase\Renderer.h(333,30): warning C4018: '<': signed/unsigned mismatch
   (compiling source file 'Main.cpp')
   
-C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Renderer.h(386,30): warning C4018: '<': signed/unsigned mismatch
+C:\dev\VisualStudio\WM9M3\RTBase\Renderer.h(396,30): warning C4018: '<': signed/unsigned mismatch
   (compiling source file 'Main.cpp')
   
   Generating code
-  3 of 2260 functions ( 0.1%) were compiled, the rest were copied from previous compilation.
+  6 of 2256 functions ( 0.3%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
-    14 functions had inline decision re-evaluated but remain unchanged
+    16 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
-  RTBase.vcxproj -> C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\x64\Release\RTBase.exe
+  RTBase.vcxproj -> C:\dev\VisualStudio\WM9M3\x64\Release\RTBase.exe

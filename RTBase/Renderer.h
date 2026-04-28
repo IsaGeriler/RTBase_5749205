@@ -56,9 +56,9 @@ public:
 		canvas = _canvas;
 
 		film = new Film();
-		film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new MitchellNetravali());
-		// film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
+		film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
 		// film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new GaussianFilter(1.5f, 0.5f));
+		// film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new MitchellNetravali());
 
 		normalFilm = new Film();
 		normalFilm->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
@@ -98,6 +98,8 @@ public:
 
 	void clear() {
 		film->clear();
+		normalFilm->clear();
+		albedoFilm->clear();
 	}
 
 	Colour computeDirect(ShadingData shadingData, Sampler* sampler) {
@@ -128,12 +130,13 @@ public:
 				
 				// Calculate Weight for MIS (Power Heuristic)
 				float bsdfPDF = shadingData.bsdf->PDF(shadingData, wi);
-				float cosTheta = Dot(wi, shadingData.sNormal);
+				float cosTheta = std::max(Dot(wi, shadingData.sNormal), EPSILON);
 				float pLight = pdf * pmf;
 				float pBsdf = bsdfPDF * gTerm / cosTheta;
 				float w = powerHeuristics(pLight, pBsdf, 2);
 
 				// Return the integral
+				if (pdf == 0) return Colour(0, 0, 0);
 				return emission * BSDF * gTerm * w / pLight;
 			}
 			return Colour(0.f, 0.f, 0.f);
@@ -147,18 +150,20 @@ public:
 			float gTerm = std::max(Dot(wi, shadingData.sNormal), 0.f);
 			 
 			// Evaluate Visibility to out-of-scene bounds
-			if (scene->visible(shadingData.x + (wi * EPSILON), shadingData.x + (wi * use<SceneBounds>().sceneRadius))) {
+			Vec3 sceneBounds = scene->bounds.max - scene->bounds.min;
+			if (scene->visible(shadingData.x + (wi * EPSILON), shadingData.x + (wi * sceneBounds.length()))) {
 				// Calculate BSDF
 				Colour BSDF = shadingData.bsdf->evaluate(shadingData, wi);
 				
 				// Calculate Weight for MIS (Power Heuristic)
 				float bsdfPDF = shadingData.bsdf->PDF(shadingData, wi);
-				float cosTheta = Dot(wi, shadingData.sNormal);
+				float cosTheta = std::max(Dot(wi, shadingData.sNormal), EPSILON);
 				float pLight = pdf * pmf;
 				float pBsdf = bsdfPDF * gTerm / cosTheta;
 				float w = powerHeuristics(pLight, pBsdf, 2);
 				
 				// Return the integral
+				if (pdf == 0) return Colour(0, 0, 0);
 				return emission * BSDF * gTerm * w / pLight;
 			}
 			return Colour(0.f, 0.f, 0.f);
@@ -209,10 +214,7 @@ public:
 
 			// Update path throughput (multiply with BSDF and cosine, divide by pdf)
 			float cosine = Dot(wi, shadingData.sNormal);
-			//float indirectBsdfPDF = shadingData.bsdf->PDF(shadingData, wi);
-			//float indirectBsdfPDFArea = indirectBsdfPDF * std::max(Dot(wi, shadingData.x), 0.f);
-			//float wIndirect = powerHeuristics(indirectBsdfPDFArea, pdf);
-			pathThroughput = pathThroughput * indirect * cosine /** wIndirect *// pdf;
+			pathThroughput = pathThroughput * indirect * cosine / pdf;
 
 			// Apply Russian Roulette
 			if (depth >= 3) {
@@ -253,32 +255,32 @@ public:
 		unsigned int pixels = film->width * film->height;
 		float* normalPtr = (float*)normalBuf.getData();
 		for (unsigned int i = 0; i < pixels; i++) {
-			normalPtr[(i * 3)] = std::min(std::max(0.f, normalFilm->film[i].r), 255.f);
-			normalPtr[(i * 3) + 1] = std::min(std::max(0.f, normalFilm->film[i].g), 255.f);
-			normalPtr[(i * 3) + 2] = std::min(std::max(0.f, normalFilm->film[i].b), 255.f);
+			normalPtr[(i * 3)] = normalFilm->film[i].r;
+			normalPtr[(i * 3) + 1] = normalFilm->film[i].g;
+			normalPtr[(i * 3) + 2] = normalFilm->film[i].b;
 		}
 
 		float* albedoPtr = (float*)albedoBuf.getData();
 		for (unsigned int i = 0; i < pixels; i++) {
-			albedoPtr[(i * 3)] = std::min(std::max(0.f, albedoFilm->film[i].r), 255.f);
-			albedoPtr[(i * 3) + 1] = std::min(std::max(0.f, albedoFilm->film[i].g), 255.f);
-			albedoPtr[(i * 3) + 2] = std::min(std::max(0.f, albedoFilm->film[i].b), 255.f);
+			albedoPtr[(i * 3)] = albedoFilm->film[i].r;
+			albedoPtr[(i * 3) + 1] = albedoFilm->film[i].g;
+			albedoPtr[(i * 3) + 2] = albedoFilm->film[i].b;
 		}
 
 		float* colourPtr = (float*)colourBuf.getData();
 		for (unsigned int i = 0; i < pixels; i++) {
-			colourPtr[(i * 3)] = std::min(std::max(0.f, film->film[i].r), 255.f);
-			colourPtr[(i * 3) + 1] = std::min(std::max(0.f, film->film[i].g), 255.f);
-			colourPtr[(i * 3) + 2] = std::min(std::max(0.f, film->film[i].b), 255.f);
+			colourPtr[(i * 3)] = film->film[i].r;
+			colourPtr[(i * 3) + 1] = film->film[i].g;
+			colourPtr[(i * 3) + 2] = film->film[i].b;
 		}
 
 		// Execute Denoising
 		filter.execute();
 		float* outputPtr = (float*)outputBuf.getData();
 		for (unsigned int i = 0; i < pixels; i++) {
-			film->film[i].r = std::min(std::max(outputPtr[(i * 3)], 0.f), 255.f);
-			film->film[i].g = std::min(std::max(outputPtr[(i * 3) + 1], 0.f), 255.f);
-			film->film[i].b = std::min(std::max(outputPtr[(i * 3) + 2], 0.f), 255.f);
+			film->film[i].r = outputPtr[(i * 3)];
+			film->film[i].g = outputPtr[(i * 3) + 1];
+			film->film[i].b = outputPtr[(i * 3) + 2];
 		}
 	}
 
@@ -304,7 +306,11 @@ public:
 				//Colour col = viewNormals(ray);
 				//Colour col = albedo(ray);
 				//Colour col = direct(ray, samplers);
+				
+				// Check for NaN and Inf Values
 				Colour col = pathTrace(ray, samplers);
+				if (std::isnan(col.r) || std::isnan(col.g) || std::isnan(col.b)) continue;
+				if (std::isinf(col.r) || std::isinf(col.g) || std::isinf(col.b)) continue;
 				film->splat(px, py, col);
 				unsigned char r, g, b;
 				film->tonemap(x, y, r, g, b, 2.f);
@@ -349,7 +355,11 @@ public:
 								//Colour col = viewNormals(ray);
 								//Colour col = albedo(ray);
 								//Colour col = direct(ray, samplers);
+								
+								// Check for NaN and Inf Values
 								Colour col = pathTrace(ray, samplers);
+								if (std::isnan(col.r) || std::isnan(col.g) || std::isnan(col.b)) continue;
+								if (std::isinf(col.r) || std::isinf(col.g) || std::isinf(col.b)) continue;
 								film->splat(px, py, col);
 								unsigned char r, g, b;
 								film->tonemap(x, y, r, g, b, 2.f);
@@ -405,12 +415,23 @@ public:
 								float px = x + samplers->next();  // + 0.5f;
 								float py = y + samplers->next();  // + 0.5f;
 								Ray ray = scene->camera.generateRay(px, py);
-								// Preparing the films for Denoising
+								// Preparing the films for Denoising (AOVs)
+								// Check for NaN and Inf Values
 								Colour normalCol = viewNormals(ray);
+								if (std::isnan(normalCol.r) || std::isnan(normalCol.g) || std::isnan(normalCol.b)) continue;
+								if (std::isinf(normalCol.r) || std::isinf(normalCol.g) || std::isinf(normalCol.b)) continue;
 								normalFilm->splat(px, py, normalCol);
+
+								// Check for NaN and Inf Values
 								Colour albedoCol = albedo(ray);
+								if (std::isnan(albedoCol.r) || std::isnan(albedoCol.g) || std::isnan(albedoCol.b)) continue;
+								if (std::isinf(albedoCol.r) || std::isinf(albedoCol.g) || std::isinf(albedoCol.b)) continue;
 								albedoFilm->splat(px, py, albedoCol);
+
+								// Check for NaN Values
 								Colour pathCol = pathTrace(ray, samplers);
+								if (std::isnan(pathCol.r) || std::isnan(pathCol.g) || std::isnan(pathCol.b)) continue;
+								if (std::isinf(pathCol.r) || std::isinf(pathCol.g) || std::isinf(pathCol.b)) continue;
 								film->splat(px, py, pathCol);
 							}
 						}
