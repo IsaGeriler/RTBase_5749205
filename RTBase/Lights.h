@@ -132,8 +132,8 @@ public:
 	}
 
 	~EnvironmentMap() {
-		if (env != nullptr) delete env;
-		if (tabulatedSampling != nullptr) delete tabulatedSampling;
+		if (env != NULL) delete env;
+		if (tabulatedSampling != NULL) delete tabulatedSampling;
 	}
 
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf) {
@@ -178,31 +178,8 @@ public:
 		float sinTheta = sinf(M_PI * v);
 		if (sinTheta <= 0.f) return 0.f;
 		// PDF = pdf(u, v) / (2 * pi * pi * sin(theta))
-		return tabulatedSampling->pdf(u, v) / (2 * M_PI * M_PI * sinTheta);
+		return tabulatedSampling->getPdf(u, v) / (2 * M_PI * M_PI * sinTheta);
 	}
-
-	// Placeholder Sample Code for MaterialsScene testing (No EnvMap)
-	//Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf)
-	//{
-	//	// Assignment: Update this code to importance sampling lighting based on luminance of each pixel
-	//	Vec3 wi = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
-	//	pdf = SamplingDistributions::uniformSpherePDF(wi);
-	//	reflectedColour = evaluate(wi);
-	//	return wi;
-	//}
-	//Colour evaluate(const Vec3& wi)
-	//{
-	//	float u = atan2f(wi.z, wi.x);
-	//	u = (u < 0.0f) ? u + (2.0f * M_PI) : u;
-	//	u = u / (2.0f * M_PI);
-	//	float v = acosf(wi.y) / M_PI;
-	//	return env->sample(u, v);
-	//}
-	//float PDF(const ShadingData& shadingData, const Vec3& wi)
-	//{
-	//	// Assignment: Update this code to return the correct PDF of luminance weighted importance sampling
-	//	return SamplingDistributions::uniformSpherePDF(wi);
-	//}
 
 	bool isArea() {
 		return false;

@@ -89,7 +89,7 @@ public:
 
 		// Transform into CDF
 		funcInt = cdf[n];
-		if (funcInt == 0) {
+		if (funcInt < EPSILON) {
 			for (int i = 1; i < n + 1; ++i) {
 				cdf[i] = (float)i / (float)n;
 			}
@@ -154,9 +154,6 @@ public:
 	}
 
 	// Methods
-	// In Distribution1D, we sample from a discrete set
-	// However, Distribution2D contains continuous set
-	// Have to convert our pdfs accordingly
 	void sample(float ru, float rv, float& u, float& v, float& pdf) const {
 		float pdfu, pdfv;
 		int dv = pMarginal->sampleDiscrete(rv, pdfv);
@@ -166,14 +163,12 @@ public:
 		int height = pMarginal->count();
 
 		// Normalize (u, v) in [0, 1] range
-		// If we don't sum up with the sampled random numbers,
-		// the lighting will over-shoot white colour/light only
 		u = (du + ru) / width;
 		v = (dv + rv) / height;
-		pdf = (pdfu * width) * (pdfv * height);
+		pdf = getPdf(u, v);
 	}
 
-	float pdf(float u, float v) const {
+	float getPdf(float u, float v) const {
 		int iu = std::min(std::max((int)(u * pConditionalV[0]->count()), 0), pConditionalV[0]->count() - 1);
 		int iv = std::min(std::max((int)(v * pMarginal->count()), 0), pMarginal->count() - 1);
 		return pConditionalV[iv]->func[iu] / pMarginal->funcInt;

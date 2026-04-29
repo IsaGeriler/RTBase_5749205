@@ -610,7 +610,7 @@ public:
 	}
 };
 
-// Done PhongBSDF, 80% Sure
+// Done PhongBSDF, 75% Sure
 class PlasticBSDF : public BSDF {
 public:
 	Texture* albedo;
@@ -631,7 +631,6 @@ public:
 	}
 
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf) {
-		// Written as weighted sum of diffuse and glossy
 		Vec3 wo = shadingData.frame.toLocal(shadingData.wo);
 		Vec3 wr(-wo.x, -wo.y, wo.z);
 		Vec3 wi;
@@ -647,8 +646,8 @@ public:
 		float r2 = sampler->next();
 
 		if (sampler->next() < ks) {
-			// Glossy Material
-			// Sample lobe
+			// Glossy Part of Material
+			// Sample a lobe
 			float thetaLobe = acosf(powf(r1, 1.f / (e + 1)));
 			float phiLobe = 2 * M_PI * r2;
 			Vec3 wLobe = SphericalCoordinates::sphericalToWorld(thetaLobe, phiLobe);
@@ -657,22 +656,23 @@ public:
 			Frame Rwr;
 			Rwr.Frame::fromVector(wr);
 
-			// Rotate vector
-			wi = Rwr.toLocal(wLobe);
+			// Rotate vector along the frame
+			wi = Rwr.toWorld(wLobe);
+
+			// PDF and BSDF
+			pdf = ks * (((e + 1) / (2 * M_PI)) * powf(std::max(Dot(wr, wi), 0.f), e));
+			float glossyBSDFEval = ((e + 2) / (2 * M_PI)) * powf(std::max(Dot(wr, wi), 0.f), e);
+			Colour glossyBSDF(glossyBSDFEval, glossyBSDFEval, glossyBSDFEval);
+			reflectedColour = glossyBSDF * ks;
+			return wi;
 		}
 		else {
-			// Diffuse Material
+			// Diffuse Part of Material
 			wi = SamplingDistributions::cosineSampleHemisphere(r1, r2);
+			pdf = wi.z * M_1_PI * kd;
+			reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) * M_1_PI * kd;
+			return shadingData.frame.toWorld(wi);
 		}
-		// PDF
-		pdf = (kd * (wi.z * M_1_PI)) + (ks * ((e + 1) / (2 * M_PI)) * powf(std::max(Dot(wr, wi), 0.f), e));
-
-		// PhongBSDF = kd * DiffuseBSDF + ks * GlossyBSDF
-		float glossyBSDFEval = ((e + 2) / (2 * M_PI)) * powf(std::max(Dot(wr, wi), 0.f), e);
-		Colour diffuseBSDF = albedo->sample(shadingData.tu, shadingData.tv) * M_1_PI;
-		Colour glossyBSDF(glossyBSDFEval, glossyBSDFEval, glossyBSDFEval);
-		reflectedColour = diffuseBSDF * kd + glossyBSDF * ks;
-		return shadingData.frame.toWorld(wi);
 	}
 
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi) {
@@ -687,7 +687,7 @@ public:
 		float kd = 1.f - ks;
 
 		// PhongBSDF = kd * DiffuseBSDF + ks * GlossyBSDF
-		float glossyBSDFEval = ((e + 2) / (2 * M_PI)) * powf(std::max(Dot(wr, wi), 0.f), e);
+		float glossyBSDFEval = ((e + 2) / (2 * M_PI)) * powf(std::max(Dot(wr, wiLocal), 0.f), e);
 		Colour diffuseBSDF = albedo->sample(shadingData.tu, shadingData.tv) * M_1_PI;
 		Colour glossyBSDF(glossyBSDFEval, glossyBSDFEval, glossyBSDFEval);
 		return diffuseBSDF * kd + glossyBSDF * ks;
@@ -705,7 +705,7 @@ public:
 		float kd = 1.f - ks;
 
 		// PDF
-		return (kd * (wi.z / M_PI)) + (ks * ((e + 1) / (2 * M_PI)) * powf(std::max(Dot(wr, wi), 0.f), e));
+		return (kd * (wi.z * M_1_PI)) + (ks * ((e + 1) / (2 * M_PI)) * powf(std::max(Dot(wr, wiLocal), 0.f), e));
 	}
 
 	bool isPureSpecular() {

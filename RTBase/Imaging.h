@@ -239,7 +239,7 @@ public:
 	void save(std::string filename) {
 		Colour* hdrpixels = new Colour[width * height];
 		for (unsigned int i = 0; i < (width * height); i++) {
-			hdrpixels[i] = (SPP > 0) ? film[i] : film[i] / (float)SPP;
+			hdrpixels[i] = (SPP > 0) ? film[i] / (float)SPP : film[i];
 		}
 		stbi_write_hdr(filename.c_str(), width, height, 3, (float*)hdrpixels);
 		delete[] hdrpixels;

@@ -103,7 +103,7 @@ public:
 	}
 
 	Colour computeDirect(ShadingData shadingData, Sampler* sampler) {
-		// Is surface is specular we cannot computing direct lighting
+		// If surface is specular we cannot computing direct lighting
 		if (shadingData.bsdf->isPureSpecular() == true) {
 			return Colour(0.0f, 0.0f, 0.0f);
 		}
@@ -117,10 +117,12 @@ public:
 		if (light->isArea()) {
 			// Sample point on light and store returned emission
 			Vec3 samplePointOnLight = light->sample(shadingData, sampler, emission, pdf);
+			if (pmf <= 0.f) return Colour(0.f, 0.f, 0.f);
 
 			// Calculate Geometry Term
 			Vec3 surfaceToLight = samplePointOnLight - shadingData.x;
 			Vec3 wi = surfaceToLight.normalize();
+			if (surfaceToLight.lengthSq() < EPSILON) return Colour(0.f, 0.f, 0.f);
 			float gTerm = (std::max(Dot(wi, shadingData.sNormal), 0.f) * std::max(-Dot(wi, light->normal(shadingData, wi)), 0.f)) / surfaceToLight.lengthSq();
 
 			// Calculate Visibility: V[x(i) <-> x(i+1)] (Binary function, from Ray Tracing)
@@ -130,13 +132,13 @@ public:
 				
 				// Calculate Weight for MIS (Power Heuristic)
 				float bsdfPDF = shadingData.bsdf->PDF(shadingData, wi);
-				float cosTheta = std::max(Dot(wi, shadingData.sNormal), EPSILON);
+				float cosine = std::max(Dot(wi, shadingData.sNormal), EPSILON);
 				float pLight = pdf * pmf;
-				float pBsdf = bsdfPDF * gTerm / cosTheta;
+				float pBsdf = bsdfPDF * gTerm / cosine;
 				float w = powerHeuristics(pLight, pBsdf, 2);
 
 				// Return the integral
-				if (pdf == 0) return Colour(0, 0, 0);
+				if (pdf <= 0) return Colour(0.f, 0.f, 0.f);
 				return emission * BSDF * gTerm * w / pLight;
 			}
 			return Colour(0.f, 0.f, 0.f);
@@ -148,8 +150,8 @@ public:
 			
 			// Evaluate Geometry Term for Environment Maps
 			float gTerm = std::max(Dot(wi, shadingData.sNormal), 0.f);
-			 
-			// Evaluate Visibility to out-of-scene bounds
+			
+			// Calculate Visibility to out-of-scene bounds (Binary function, from Ray Tracing)
 			Vec3 sceneBounds = scene->bounds.max - scene->bounds.min;
 			if (scene->visible(shadingData.x + (wi * EPSILON), shadingData.x + (wi * sceneBounds.length()))) {
 				// Calculate BSDF
@@ -157,13 +159,13 @@ public:
 				
 				// Calculate Weight for MIS (Power Heuristic)
 				float bsdfPDF = shadingData.bsdf->PDF(shadingData, wi);
-				float cosTheta = std::max(Dot(wi, shadingData.sNormal), EPSILON);
+				float cosine = std::max(Dot(wi, shadingData.sNormal), EPSILON);
 				float pLight = pdf * pmf;
-				float pBsdf = bsdfPDF * gTerm / cosTheta;
+				float pBsdf = bsdfPDF * gTerm / cosine;
 				float w = powerHeuristics(pLight, pBsdf, 2);
 				
 				// Return the integral
-				if (pdf == 0) return Colour(0, 0, 0);
+				if (pdf <= 0) return Colour(0.f, 0.f, 0.f);
 				return emission * BSDF * gTerm * w / pLight;
 			}
 			return Colour(0.f, 0.f, 0.f);
@@ -199,7 +201,7 @@ public:
 			}
 			// Calculate Direct Lighting
 			Colour direct = pathThroughput * computeDirect(shadingData, sampler);
-			// if (depth >= 10) return direct;
+			// if (depth > 10) return direct;
 
 			// Sample Indirect Direction
 			// Vec3 incomingRadiance = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
@@ -218,7 +220,7 @@ public:
 
 			// Apply Russian Roulette
 			if (depth >= 3) {
-				float rrp = std::min(pathThroughput.Lum(), 0.995f);
+				float rrp = std::min(pathThroughput.Lum(), 0.99f);
 				if (sampler->next() < rrp) {
 					pathThroughput = pathThroughput / rrp;
 					return direct + pathTraceRecursive(indirectRay, pathThroughput, depth + 1, sampler);
@@ -278,9 +280,9 @@ public:
 		filter.execute();
 		float* outputPtr = (float*)outputBuf.getData();
 		for (unsigned int i = 0; i < pixels; i++) {
-			film->film[i].r = outputPtr[(i * 3)];
-			film->film[i].g = outputPtr[(i * 3) + 1];
-			film->film[i].b = outputPtr[(i * 3) + 2];
+			film->film[i].r = std::max(std::min(outputPtr[(i * 3)], 255.f), 0.f);
+			film->film[i].g = std::max(std::min(outputPtr[(i * 3) + 1], 255.f), 0.f);
+			film->film[i].b = std::max(std::min(outputPtr[(i * 3) + 2], 255.f), 0.f);
 		}
 	}
 
@@ -309,8 +311,9 @@ public:
 				
 				// Check for NaN and Inf Values
 				Colour col = pathTrace(ray, samplers);
-				if (std::isnan(col.r) || std::isnan(col.g) || std::isnan(col.b)) continue;
-				if (std::isinf(col.r) || std::isinf(col.g) || std::isinf(col.b)) continue;
+				if (std::isnan(col.r) || std::isnan(col.g) || std::isnan(col.b)) col = Colour(0.f, 0.f, 0.f);
+				if (std::isinf(col.r) || std::isinf(col.g) || std::isinf(col.b)) col = Colour(0.f, 0.f, 0.f);
+
 				film->splat(px, py, col);
 				unsigned char r, g, b;
 				film->tonemap(x, y, r, g, b, 2.f);
@@ -358,8 +361,9 @@ public:
 								
 								// Check for NaN and Inf Values
 								Colour col = pathTrace(ray, samplers);
-								if (std::isnan(col.r) || std::isnan(col.g) || std::isnan(col.b)) continue;
-								if (std::isinf(col.r) || std::isinf(col.g) || std::isinf(col.b)) continue;
+								if (std::isnan(col.r) || std::isnan(col.g) || std::isnan(col.b)) col = Colour(0.f, 0.f, 0.f);
+								if (std::isinf(col.r) || std::isinf(col.g) || std::isinf(col.b)) col = Colour(0.f, 0.f, 0.f);
+								
 								film->splat(px, py, col);
 								unsigned char r, g, b;
 								film->tonemap(x, y, r, g, b, 2.f);
@@ -415,20 +419,14 @@ public:
 								float px = x + samplers->next();  // + 0.5f;
 								float py = y + samplers->next();  // + 0.5f;
 								Ray ray = scene->camera.generateRay(px, py);
+								
 								// Preparing the films for Denoising (AOVs)
-								// Check for NaN and Inf Values
 								Colour normalCol = viewNormals(ray);
-								if (std::isnan(normalCol.r) || std::isnan(normalCol.g) || std::isnan(normalCol.b)) continue;
-								if (std::isinf(normalCol.r) || std::isinf(normalCol.g) || std::isinf(normalCol.b)) continue;
 								normalFilm->splat(px, py, normalCol);
-
-								// Check for NaN and Inf Values
 								Colour albedoCol = albedo(ray);
-								if (std::isnan(albedoCol.r) || std::isnan(albedoCol.g) || std::isnan(albedoCol.b)) continue;
-								if (std::isinf(albedoCol.r) || std::isinf(albedoCol.g) || std::isinf(albedoCol.b)) continue;
 								albedoFilm->splat(px, py, albedoCol);
 
-								// Check for NaN Values
+								// Check for NaN and Inf Values
 								Colour pathCol = pathTrace(ray, samplers);
 								if (std::isnan(pathCol.r) || std::isnan(pathCol.g) || std::isnan(pathCol.b)) continue;
 								if (std::isinf(pathCol.r) || std::isinf(pathCol.g) || std::isinf(pathCol.b)) continue;
