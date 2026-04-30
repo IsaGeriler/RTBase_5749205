@@ -1,28 +1,38 @@
 ﻿  Main.cpp
-C:\dev\VisualStudio\WM9M3\RTBase\Sampling.h(40,14): warning C4305: 'return': truncation from 'double' to 'float'
+C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Imaging.h(138,29): warning C4305: 'argument': truncation from 'double' to 'float'
   (compiling source file 'Main.cpp')
   
-C:\dev\VisualStudio\WM9M3\RTBase\Sampling.h(66,14): warning C4305: 'return': truncation from 'double' to 'float'
+C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Imaging.h(138,62): warning C4305: 'argument': truncation from 'double' to 'float'
   (compiling source file 'Main.cpp')
   
-C:\dev\VisualStudio\WM9M3\RTBase\Geometry.h(372,28): warning C4267: '=': conversion from 'size_t' to 'unsigned char', possible loss of data
+C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Imaging.h(198,23): warning C4018: '<': signed/unsigned mismatch
   (compiling source file 'Main.cpp')
   
-C:\dev\VisualStudio\WM9M3\RTBase\Imaging.h(138,15): warning C4305: 'argument': truncation from 'double' to 'float'
+C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Imaging.h(198,48): warning C4018: '<': signed/unsigned mismatch
   (compiling source file 'Main.cpp')
   
-C:\dev\VisualStudio\WM9M3\RTBase\Imaging.h(138,48): warning C4305: 'argument': truncation from 'double' to 'float'
+C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Imaging.h(206,21): warning C4018: '<': signed/unsigned mismatch
   (compiling source file 'Main.cpp')
   
-C:\dev\VisualStudio\WM9M3\RTBase\Imaging.h(198,23): warning C4018: '<': signed/unsigned mismatch
+C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Sampling.h(43,14): warning C4305: 'return': truncation from 'double' to 'float'
   (compiling source file 'Main.cpp')
   
-C:\dev\VisualStudio\WM9M3\RTBase\Imaging.h(198,48): warning C4018: '<': signed/unsigned mismatch
+C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Sampling.h(69,14): warning C4305: 'return': truncation from 'double' to 'float'
   (compiling source file 'Main.cpp')
   
-C:\dev\VisualStudio\WM9M3\RTBase\Imaging.h(206,21): warning C4018: '<': signed/unsigned mismatch
+C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Sampling.h(104,38): warning C4267: 'return': conversion from 'size_t' to 'int', possible loss of data
   (compiling source file 'Main.cpp')
   
-C:\dev\VisualStudio\WM9M3\RTBase\Geometry.h(432,1): warning C4715: 'BVHNode::traverseVisible': not all control paths return a value
-C:\dev\VisualStudio\WM9M3\RTBase\Renderer.h(100,1): warning C4715: 'RayTracer::computeDirect': not all control paths return a value
-  RTBase.vcxproj -> C:\dev\VisualStudio\WM9M3\x64\Debug\RTBase.exe
+C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Sampling.h(110,12): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+  (compiling source file 'Main.cpp')
+  
+C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Geometry.h(390,34): warning C4267: '=': conversion from 'size_t' to 'unsigned int', possible loss of data
+  (compiling source file 'Main.cpp')
+  
+C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Renderer.h(336,30): warning C4018: '<': signed/unsigned mismatch
+  (compiling source file 'Main.cpp')
+  
+C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\RTBase\Renderer.h(400,30): warning C4018: '<': signed/unsigned mismatch
+  (compiling source file 'Main.cpp')
+  
+  RTBase.vcxproj -> C:\Users\u5749205\source\repos\IsaGeriler\RTBase_5749205\x64\Debug\RTBase.exe

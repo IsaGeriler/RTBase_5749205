@@ -115,8 +115,10 @@ public:
 	}
 
 	Vec3 sampleDirectionFromLight(Sampler* sampler, float& pdf) {
-		Vec3 wi = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
-		pdf = SamplingDistributions::uniformSpherePDF(wi);
+		// Vec3 wi = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
+		// pdf = SamplingDistributions::uniformSpherePDF(wi);
+		Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
+		pdf = SamplingDistributions::cosineHemispherePDF(wi);
 		return wi;
 	}
 };
@@ -212,8 +214,28 @@ public:
 
 	Vec3 sampleDirectionFromLight(Sampler* sampler, float& pdf) {
 		// Replace this tabulated sampling of environment maps
-		Vec3 wi = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
-		pdf = SamplingDistributions::uniformSpherePDF(wi);
-		return wi;
+		// Vec3 wi = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
+		// pdf = SamplingDistributions::uniformSpherePDF(wi);
+		// return wi;
+
+		// Sample (u, v) from tabulated distribution
+		float u = 0.f;
+		float v = 0.f;
+		float sampledPdf;
+		tabulatedSampling->sample(sampler->next(), sampler->next(), u, v, sampledPdf);
+
+		// Convert to spherical coordinates - theta = pi * v, phi = 2 * pi * u
+		float theta = M_PI * v;
+		float phi = 2 * M_PI * u;
+
+		// Convert to direction (y-up) - (cos(phi)*sin(theta), cos(theta), sin(phi)*sin(theta))
+		float cosTheta = cos(theta);
+		float cosPhi = cos(phi);
+		float sinTheta = sin(theta);
+		float sinPhi = sin(phi);
+
+		Vec3 wi(cosPhi * sinTheta, cosTheta, sinPhi * sinTheta);
+		pdf = (sinTheta <= 0.f) ? 0.f : sampledPdf / (2 * M_PI * M_PI * sinTheta);
+		return wi; // or -wi
 	}
 };

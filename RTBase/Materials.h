@@ -402,7 +402,7 @@ public:
 			// Refraction (Transmission)
 			float sinThetaI = std::max(sqrtf(1.f - powf(cosThetaI, 2)), 0.f);
 			float sin2ThetaT = powf(IOR * sinThetaI, 2);
-			if (sin2ThetaT > 1.f) {
+			if (sin2ThetaT >= 1.f) {
 				// Total Internal Reflection
 				pdf = 1.f;
 				Vec3 wr(-woLocal.x, -woLocal.y, woLocal.z);
