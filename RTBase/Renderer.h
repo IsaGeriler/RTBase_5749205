@@ -34,12 +34,12 @@ struct ScreenTile {
 // Virtual Point Lights
 class VPL {
 public:
+	// Stored attributes
 	ShadingData shadingData;
 	Colour Le;
+	
 	// ShadingData created at each interaction when creating VPLS
-	// Or from when creating VPL on light source
-	// – For area lights, initialize with ShadingData(p, light->normal(p));
-	// – Where p = light->samplePositionFromLight(sampler, pdfPosition);
+	VPL(ShadingData _shadingData, Colour _Le) : shadingData(_shadingData), Le(_Le) {}
 };
 
 // Concept
@@ -234,27 +234,20 @@ public:
 		Colour pathThroughput(1.f, 1.f, 1.f);
 		return pathTraceRecursive(r, pathThroughput, 0, sampler);
 	}
-
-	// Recheck... probably something is wrong here
-	Colour pathTraceRecursive(Ray& r, Colour& pathThroughput, int depth, Sampler* sampler) {
+	
+	Colour pathTraceRecursive(Ray& r, Colour& pathThroughput, int depth, Sampler* sampler, float isSpecular = false) {
 		// Add pathtracer code here
 		// Trace Ray
 		IntersectionData intersection = scene->traverse(r);
 		ShadingData shadingData = scene->calculateShadingData(intersection, r);
 		if (shadingData.t < FLT_MAX) {
 			if (shadingData.bsdf->isLight()) {
-				return (depth <= 1) ? shadingData.bsdf->emit(shadingData, shadingData.wo) : Colour(0.f, 0.f, 0.f);
+				return (depth == 0 || isSpecular) ? shadingData.bsdf->emit(shadingData, shadingData.wo) : Colour(0.f, 0.f, 0.f);
 			}
 			// Calculate Direct Lighting
 			Colour direct = pathThroughput * computeDirect(shadingData, sampler);
-			// if (depth > 10) return direct;
-
-			// Sample Indirect Direction
-			// Vec3 incomingRadiance = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
-			// float pdf = SamplingDistributions::cosineHemispherePDF(incomingRadiance);
-			// incomingRadiance = shadingData.frame.toWorld(incomingRadiance);
-			// Colour indirect = shadingData.bsdf->evaluate(shadingData, wi);
 			
+			// Calculate Indirect Lighting
 			float pdf;
 			Colour indirect;
 			Vec3 wi = shadingData.bsdf->sample(shadingData, sampler, indirect, pdf);
@@ -266,14 +259,12 @@ public:
 
 			// Apply Russian Roulette
 			if (depth >= 3) {
-				float rrp = std::min(pathThroughput.Lum(), 0.99f);
-				if (sampler->next() < rrp) {
-					pathThroughput = pathThroughput / rrp;
-					return direct + pathTraceRecursive(indirectRay, pathThroughput, depth + 1, sampler);
-				}
+				float rrp = std::min(pathThroughput.Lum(), 0.995f);
+				if (sampler->next() < rrp) pathThroughput = pathThroughput / rrp;
 				else return direct;
 			}
-			return direct + pathTraceRecursive(indirectRay, pathThroughput, depth + 1, sampler);
+			// isSpecular will be the boolean state of the previous surface to contribute when the light is viewed in a specular surface
+			return direct + pathTraceRecursive(indirectRay, pathThroughput, depth + 1, sampler, shadingData.bsdf->isPureSpecular());
 		}
 		return scene->background->evaluate(r.dir) * pathThroughput;
 	}
