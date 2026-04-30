@@ -17,15 +17,15 @@ C:\dev\VisualStudio\WM9M3\RTBase\Sampling.h(110,12): warning C4267: 'initializin
 C:\dev\VisualStudio\WM9M3\RTBase\Geometry.h(390,34): warning C4267: '=': conversion from 'size_t' to 'unsigned int', possible loss of data
   (compiling source file 'Main.cpp')
   
-C:\dev\VisualStudio\WM9M3\RTBase\Renderer.h(492,30): warning C4018: '<': signed/unsigned mismatch
+C:\dev\VisualStudio\WM9M3\RTBase\Renderer.h(484,30): warning C4018: '<': signed/unsigned mismatch
   (compiling source file 'Main.cpp')
   
-C:\dev\VisualStudio\WM9M3\RTBase\Renderer.h(555,30): warning C4018: '<': signed/unsigned mismatch
+C:\dev\VisualStudio\WM9M3\RTBase\Renderer.h(546,30): warning C4018: '<': signed/unsigned mismatch
   (compiling source file 'Main.cpp')
   
   Generating code
-  1 of 2259 functions (<0.1%) were compiled, the rest were copied from previous compilation.
+  1 of 2247 functions (<0.1%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
-    16 functions had inline decision re-evaluated but remain unchanged
+    14 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   RTBase.vcxproj -> C:\dev\VisualStudio\WM9M3\x64\Release\RTBase.exe

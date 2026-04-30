@@ -84,14 +84,6 @@ public:
 	std::thread** threads;
 	int numProcs;
 
-	// OIDN
-	oidn::DeviceRef device;
-	oidn::FilterRef filter;
-	oidn::BufferRef colourBuf;
-	oidn::BufferRef albedoBuf;
-	oidn::BufferRef normalBuf;
-	oidn::BufferRef outputBuf;
-
 	Film* film;
 	Film* normalFilm;
 	Film* albedoFilm;
@@ -100,10 +92,9 @@ public:
 		scene = _scene;
 		canvas = _canvas;
 
+		// Creating separate films to store shading normals, albedos, and path trace splat colours for denoising (AOVs)
 		film = new Film();
 		film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
-		// film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new GaussianFilter(1.5f, 0.5f));
-		// film->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new MitchellNetravali());
 
 		normalFilm = new Film();
 		normalFilm->init((unsigned int)scene->camera.width, (unsigned int)scene->camera.height, new BoxFilter());
@@ -116,27 +107,6 @@ public:
 		numProcs = sysInfo.dwNumberOfProcessors;
 		threads = new std::thread * [numProcs];
 		samplers = new MTRandom[numProcs];
-
-		// OIDN
-		device = oidn::newDevice();
-		device.commit();
-
-		// Check for errors
-		const char* errorMessage;
-		if (device.getError(errorMessage) != oidn::Error::None) std::cout << "Error: " << errorMessage << std::endl;
-
-		colourBuf = device.newBuffer(film->width * film->height * 3 * sizeof(float));
-		albedoBuf = device.newBuffer(albedoFilm->width * albedoFilm->height * 3 * sizeof(float));
-		normalBuf = device.newBuffer(normalFilm->width * normalFilm->height * 3 * sizeof(float));
-		outputBuf = device.newBuffer(film->width * film->height * 3 * sizeof(float));
-
-		filter = device.newFilter("RT");
-		filter.setImage("color", colourBuf, oidn::Format::Float3, film->width, film->height);
-		filter.setImage("albedo", albedoBuf, oidn::Format::Float3, albedoFilm->width, albedoFilm->height);
-		filter.setImage("normal", normalBuf, oidn::Format::Float3, normalFilm->width, normalFilm->height);
-		filter.setImage("output", outputBuf, oidn::Format::Float3, film->width, film->height);
-		filter.set("hdr", true);
-		filter.commit();
 		
 		clear();
 	}
@@ -192,6 +162,7 @@ public:
 		else {
 			// Sample from light, returns direction instead of point
 			Vec3 wi = light->sample(shadingData, sampler, emission, pdf);
+			if (pmf <= 0.f) return Colour(0.f, 0.f, 0.f);
 			
 			// Evaluate Geometry Term for Environment Maps
 			float gTerm = std::max(Dot(wi, shadingData.sNormal), 0.f);
@@ -242,6 +213,7 @@ public:
 		ShadingData shadingData = scene->calculateShadingData(intersection, r);
 		if (shadingData.t < FLT_MAX) {
 			if (shadingData.bsdf->isLight()) {
+				// Either emit at the first depth or specular surface, or use MIS to prevent double counting (need previous surface info.)
 				return (depth == 0 || isSpecular) ? shadingData.bsdf->emit(shadingData, shadingData.wo) : Colour(0.f, 0.f, 0.f);
 			}
 			// Calculate Direct Lighting
@@ -259,6 +231,8 @@ public:
 
 			// Apply Russian Roulette
 			if (depth >= 3) {
+				// Normally rrp (Russian Roulette Probability) is std::min(pathThroughput.Lum(), 1.f)
+				// However, I set to 0.99f as 1.f would somehow result in a stack overflow at my BVH Traverse code...
 				float rrp = std::min(pathThroughput.Lum(), 0.99f);
 				if (sampler->next() < rrp) pathThroughput = pathThroughput / rrp;
 				else return direct;
@@ -410,19 +384,44 @@ public:
 	}
 
 	void denoise() {
-		unsigned int pixels = film->width * film->height;
-		float* normalPtr = (float*)normalBuf.getData();
-		for (unsigned int i = 0; i < pixels; i++) {
-			normalPtr[(i * 3)] = normalFilm->film[i].r;
-			normalPtr[(i * 3) + 1] = normalFilm->film[i].g;
-			normalPtr[(i * 3) + 2] = normalFilm->film[i].b;
-		}
+		unsigned int width = film->width;
+		unsigned int height = film->height;
+		unsigned int pixels = width * height;
 
+		// OIDN
+		oidn::DeviceRef device = oidn::newDevice(oidn::DeviceType::CPU);
+		device.commit();
+
+		// Check for errors
+		const char* errorMessage;
+		if (device.getError(errorMessage) != oidn::Error::None) std::cout << "Error: " << errorMessage << std::endl;
+
+		oidn::BufferRef colourBuf = device.newBuffer(width * height * 3 * sizeof(float));
+		oidn::BufferRef albedoBuf = device.newBuffer(width * height * 3 * sizeof(float));
+		oidn::BufferRef normalBuf = device.newBuffer(width * height * 3 * sizeof(float));
+		oidn::BufferRef outputBuf = device.newBuffer(width * height * 3 * sizeof(float));
+
+		oidn::FilterRef filter = device.newFilter("RT");
+		filter.setImage("color", colourBuf, oidn::Format::Float3, width, height);   // beauty
+		filter.setImage("albedo", albedoBuf, oidn::Format::Float3, width, height);  // auxilary
+		filter.setImage("normal", normalBuf, oidn::Format::Float3, width, height);  // auxilary
+		filter.setImage("output", outputBuf, oidn::Format::Float3, width, height);  // denoised beauty
+		filter.set("hdr", true);
+		filter.commit();
+
+		unsigned int pixels = film->width * film->height;
 		float* albedoPtr = (float*)albedoBuf.getData();
 		for (unsigned int i = 0; i < pixels; i++) {
 			albedoPtr[(i * 3)] = albedoFilm->film[i].r;
 			albedoPtr[(i * 3) + 1] = albedoFilm->film[i].g;
 			albedoPtr[(i * 3) + 2] = albedoFilm->film[i].b;
+		}
+
+		float* normalPtr = (float*)normalBuf.getData();
+		for (unsigned int i = 0; i < pixels; i++) {
+			normalPtr[(i * 3)] = normalFilm->film[i].r;
+			normalPtr[(i * 3) + 1] = normalFilm->film[i].g;
+			normalPtr[(i * 3) + 2] = normalFilm->film[i].b;
 		}
 
 		float* colourPtr = (float*)colourBuf.getData();
@@ -436,9 +435,9 @@ public:
 		filter.execute();
 		float* outputPtr = (float*)outputBuf.getData();
 		for (unsigned int i = 0; i < pixels; i++) {
-			film->film[i].r = std::max(std::min(outputPtr[(i * 3)], 255.f), 0.f);
-			film->film[i].g = std::max(std::min(outputPtr[(i * 3) + 1], 255.f), 0.f);
-			film->film[i].b = std::max(std::min(outputPtr[(i * 3) + 2], 255.f), 0.f);
+			film->film[i].r = outputPtr[(i * 3)];
+			film->film[i].g = outputPtr[(i * 3) + 1];
+			film->film[i].b = outputPtr[(i * 3) + 2];
 		}
 	}
 
@@ -450,7 +449,6 @@ public:
 		if (renderMode == 2) renderMultithreadDenoise();
 		if (renderMode == 3) renderLightTrace();
 		// if (renderMode == 4) renderInstantRadiosity();
-		// if (renderMode == 5) renderPSSMLT();
 	}
 
 	void renderSequential() {
@@ -461,9 +459,6 @@ public:
 				float px = x + samplers->next();  // + 0.5f;
 				float py = y + samplers->next();  // + 0.5f;
 				Ray ray = scene->camera.generateRay(px, py);
-				//Colour col = viewNormals(ray);
-				//Colour col = albedo(ray);
-				//Colour col = direct(ray, samplers);
 				
 				// Check for NaN and Inf Values
 				Colour col = pathTrace(ray, samplers);
@@ -511,14 +506,12 @@ public:
 								float px = x + samplers->next();  // + 0.5f;
 								float py = y + samplers->next();  // + 0.5f;
 								Ray ray = scene->camera.generateRay(px, py);
-								//Colour col = viewNormals(ray);
-								//Colour col = albedo(ray);
-								//Colour col = direct(ray, samplers);
 								
 								// Check for NaN and Inf Values
 								Colour col = pathTrace(ray, samplers);
 								if (std::isnan(col.r) || std::isnan(col.g) || std::isnan(col.b)) col = Colour(0.f, 0.f, 0.f);
 								if (std::isinf(col.r) || std::isinf(col.g) || std::isinf(col.b)) col = Colour(0.f, 0.f, 0.f);
+								
 								film->splat(px, py, col);
 								unsigned char r, g, b;
 								film->tonemap(x, y, r, g, b, 2.f);
@@ -578,6 +571,7 @@ public:
 								// Preparing the films for Denoising (AOVs)
 								Colour normalCol = viewNormals(ray);
 								normalFilm->splat(px, py, normalCol);
+
 								Colour albedoCol = albedo(ray);
 								albedoFilm->splat(px, py, albedoCol);
 
