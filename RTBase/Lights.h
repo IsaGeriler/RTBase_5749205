@@ -63,8 +63,8 @@ public:
 
 	Vec3 sampleDirectionFromLight(Sampler* sampler, float& pdf) {
 		// Add code to sample a direction from the light
-		Vec3 wi = Vec3(0, 0, 1);
-		pdf = 1.0f;
+		Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
+		pdf = SamplingDistributions::cosineHemispherePDF(wi);
 		Frame frame;
 		frame.fromVector(triangle->gNormal());
 		return frame.toWorld(wi);
@@ -115,10 +115,8 @@ public:
 	}
 
 	Vec3 sampleDirectionFromLight(Sampler* sampler, float& pdf) {
-		// Vec3 wi = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
-		// pdf = SamplingDistributions::uniformSpherePDF(wi);
-		Vec3 wi = SamplingDistributions::cosineSampleHemisphere(sampler->next(), sampler->next());
-		pdf = SamplingDistributions::cosineHemispherePDF(wi);
+		Vec3 wi = SamplingDistributions::uniformSampleSphere(sampler->next(), sampler->next());
+		pdf = SamplingDistributions::uniformSpherePDF(wi);
 		return wi;
 	}
 };
@@ -236,6 +234,6 @@ public:
 
 		Vec3 wi(cosPhi * sinTheta, cosTheta, sinPhi * sinTheta);
 		pdf = (sinTheta <= 0.f) ? 0.f : sampledPdf / (2 * M_PI * M_PI * sinTheta);
-		return wi; // or -wi
+		return -wi;
 	}
 };

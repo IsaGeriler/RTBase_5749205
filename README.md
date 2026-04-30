@@ -1,12 +1,20 @@
 # RTBase
 
-## Current Image of Cornell Box
+## Current Image of Cornell Box (Path Trace)
 
 Materials: DiffuseBSDF
 
 Lighting: Area Light
 
 <img alt="CornellBox" src="Images/PathTraceCornellBox.png" />
+
+## Current Image of Cornell Box (Light Trace)
+
+Materials: DiffuseBSDF
+
+Lighting: Area Light
+
+<img alt="CornellBox" src="Images/LightTraceCornellBox.png" />
 
 ## Current Image of Glass of Water
 

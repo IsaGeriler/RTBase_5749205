@@ -253,83 +253,87 @@ public:
 	}
 
 	// Light Tracing
-	// Handle connections to camera
+	// Recheck... probably something is wrong here as only Cornell Box works properly
 	void connectToCamera(Vec3 p, Vec3 n, Colour col) {
-		// Check if p is on camera
+		// Handle connections to camera
 		float x, y;
+		// Check if p is on camera
 		if (scene->camera.projectOntoCamera(p, x, y)) {
 			// Compute geometry term between p and camera
 			Vec3 cNormal = scene->camera.viewDirection;  // Camera normal
 			Vec3 cPos = scene->camera.origin;			 // Camera position
 			Vec3 cDirection = cPos - p;					 // Direction to camera
 
+			// Visibility Check
 			if (scene->visible(p, cPos)) {
 				Vec3 wi = cDirection.normalize();
 				if (cDirection.lengthSq() < EPSILON) return;
 
 				// Need to compute We(x,w) = 1.f / (Afilm * cos4Theta)
 				// Theta is angle between scene->camera.viewDirection and direction to camera
-				float cosTheta = std::max(Dot(cNormal, -cDirection), EPSILON);
+				float cosTheta = std::max(-Dot(cNormal, wi), EPSILON);
+				float gTerm = cosTheta * std::max(Dot(n, wi), EPSILON) / cDirection.lengthSq();
 				float Afilm = scene->camera.Afilm;
 				float W = 1.f / (Afilm * powf(cosTheta, 4));
 
 				// Splat col onto film at coordinates from projectOntoCamera
-				film->splat(x, y, col * W);
+				film->splat(x, y, col * gTerm * W);
 			}
 		}
 	}
-
-	// Handles starting a light path
+	
 	void lightTrace(Sampler* sampler) {
+		// Handles starting a light path
 		// Sample a light source
 		float pmf;
 		Light* light = scene->sampleLight(sampler, pmf);
-		
+		Colour pathThroughput(1.f, 1.f, 1.f);
+
 		// Area Light
 		if (light->isArea()) {
 			// Sample point and direction from on light source
 			float pdfDirection, pdfPosition;
 			Vec3 p = light->samplePositionFromLight(sampler, pdfPosition);
 			Vec3 wi = light->sampleDirectionFromLight(sampler, pdfDirection);
+
+			// Light Normal
+			Vec3 n = light->normal(ShadingData(), p);
 			
 			// Connect position to camera
-			Colour col = light->evaluate(-wi) / pdfPosition;
-			Colour pathThroughput(1.f, 1.f, 1.f);
-			connectToCamera(p, wi, col);
+			Colour col = light->evaluate(-wi) / pdfPosition * pmf;
+			connectToCamera(p, n, col);
 			
-			// Create a ray starting at p in direction wi
+			// Create a ray starting at p in direction wi and then call lightTracePath
 			Ray r(p + (wi * EPSILON), wi);
-
-			// Then call
 			lightTracePath(r, pathThroughput, col, sampler, 0);
 		}
 		// Environment Map
 		else {
-			// Need to flip direction to trace into scene
+			// Need to flip direction to trace into scene (done inside the function already)
 			float pdfBounds, pdfDirection;
-			Vec3 wi = -(light->sampleDirectionFromLight(sampler, pdfDirection));
+			Vec3 wi = light->sampleDirectionFromLight(sampler, pdfDirection);
 			
 			// Sample position on the scene
 			Vec3 sampledPos = light->samplePositionFromLight(sampler, pdfBounds);
+
+			// Light Normal
+			Vec3 n = light->normal(ShadingData(), sampledPos);
 			
 			// Overall PDF is product of Direction PDF and Position on bounds PDF
 			float pdf = pdfBounds + pdfDirection;
 
 			// Connect position to camera
-			Colour col = light->evaluate(-wi) / pdf;
-			Colour pathThroughput(1.f, 1.f, 1.f);
-			connectToCamera(sampledPos, wi, col);
-
-			// Create a ray starting at p in direction wi
+			Colour col = light->evaluate(-wi) / pdf * pmf;
+			connectToCamera(sampledPos, n, col);
+			
+			// Create a ray starting at p in direction wi and then call lightTracePath
 			Ray r(sampledPos + (wi * EPSILON), wi);
-
-			// Then call
 			lightTracePath(r, pathThroughput, col, sampler, 0);
 		}
 	}
 
-	// Handles tracing the rest of the light path
 	void lightTracePath(Ray& r, Colour pathThroughput, Colour Le, Sampler* sampler, int depth) {
+		// Handles tracing the rest of the light path
 		IntersectionData intersection = scene->traverse(r);
 		ShadingData shadingData = scene->calculateShadingData(intersection, r);
 		if (shadingData.t < FLT_MAX) {
@@ -423,7 +427,7 @@ public:
 
 	void render() {
 		// General Render Function to Select Desired Rendering Method
-		int renderMode = 3;
+		int renderMode = 2;
 		if (renderMode == 0) renderSequential();
 		if (renderMode == 1) renderMultithread();
 		if (renderMode == 2) renderMultithreadDenoise();
@@ -498,9 +502,7 @@ public:
 								Colour col = pathTrace(ray, samplers);
 								if (std::isnan(col.r) || std::isnan(col.g) || std::isnan(col.b)) col = Colour(0.f, 0.f, 0.f);
 								if (std::isinf(col.r) || std::isinf(col.g) || std::isinf(col.b)) col = Colour(0.f, 0.f, 0.f);
-								
-								// film->splat(px, py, col);
-								lightTrace(samplers);
+								film->splat(px, py, col);
 								unsigned char r, g, b;
 								film->tonemap(x, y, r, g, b, 2.f);
 								canvas->draw(x, y, r, g, b);
@@ -595,7 +597,6 @@ public:
 		}
 	}
 
-	// Light Tracing
 	void renderLightTrace() {
 		// Sequential Rendering
 		film->incrementSPP();
@@ -614,7 +615,6 @@ public:
 		}
 	}
 
-	// Instant Radiosity
 	void renderInstantRadiosity() {
 		// TO:DO
 		film->incrementSPP();
