@@ -259,7 +259,7 @@ public:
 
 			// Apply Russian Roulette
 			if (depth >= 3) {
-				float rrp = std::min(pathThroughput.Lum(), 0.995f);
+				float rrp = std::min(pathThroughput.Lum(), 0.99f);
 				if (sampler->next() < rrp) pathThroughput = pathThroughput / rrp;
 				else return direct;
 			}
