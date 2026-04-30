@@ -31,24 +31,50 @@ struct ScreenTile {
 	unsigned int tile_y_end(Film* film) const { return std::min(tile_y + tile_size - 1, film->height - 1); }
 };
 
+// Virtual Point Lights
 class VPL {
 public:
 	ShadingData shadingData;
 	Colour Le;
-
-	// – For area lights, initialize with
-	// ShadingData(p, light->normal(p));
-	// – Where
-	// p = light->samplePositionFromLight(sampler, pdfPosition);
-
+	// ShadingData created at each interaction when creating VPLS
+	// Or from when creating VPL on light source
+	// – For area lights, initialize with ShadingData(p, light->normal(p));
+	// – Where p = light->samplePositionFromLight(sampler, pdfPosition);
 };
 
+// Concept
+// – Trace a small number of well distributed paths from the light
+// – Store information at each intersection
+//	 • Virtual Point Light (VPL)
+// – Calculate contribution from each VPL to points visible from the camera
+
+// First pass
+// – Trace a small number of well distributed paths from the light
+// – Store a VPL data at each interaction
+// – Use quasi random sequences for tracing paths
+
+// Virtual Point Lights
+// – Tuple of values: (VPL Position, Surface Normal at VPL, BSDF at VPL position, VPL Emitted Radiance)
+
 // Second pass (can be parallelized)
+// – Trace a path from the camera to the first nonspecular vertex
+// – Calculate direct light from each VPL
 // For each pixel
 // • Trace ray
 // • Iterate over all stored VPLs
 // • Compute Contribution
 
+// Instant Radiosity
+// Handle direct lighting as usual
+// Sum over Nvpl lights can be expensive
+// – How big should it be ?
+// Interleaved sampling and filtering can improve
+
+// Unbiased but artifacts
+// – Structured noise
+// – Weak singularity in the Geometry Term
+// – Cannot capture caustics
+// Equivalent to Bidirectional Path Tracing for t = 1 and shared light paths
 
 class RayTracer {
 public:
@@ -217,7 +243,7 @@ public:
 		ShadingData shadingData = scene->calculateShadingData(intersection, r);
 		if (shadingData.t < FLT_MAX) {
 			if (shadingData.bsdf->isLight()) {
-				return (depth == 0) ? shadingData.bsdf->emit(shadingData, shadingData.wo) : Colour(0.f, 0.f, 0.f);
+				return (depth <= 1) ? shadingData.bsdf->emit(shadingData, shadingData.wo) : Colour(0.f, 0.f, 0.f);
 			}
 			// Calculate Direct Lighting
 			Colour direct = pathThroughput * computeDirect(shadingData, sampler);
@@ -427,7 +453,7 @@ public:
 
 	void render() {
 		// General Render Function to Select Desired Rendering Method
-		int renderMode = 2;
+		int renderMode = 1;
 		if (renderMode == 0) renderSequential();
 		if (renderMode == 1) renderMultithread();
 		if (renderMode == 2) renderMultithreadDenoise();

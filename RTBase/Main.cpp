@@ -16,7 +16,7 @@ int main(int argc, char* argv[]) {
 	// runTests()
 
 	// Initialize default parameters
-	std::string sceneName = "Scenes/cornell-box";
+	std::string sceneName = "Scenes/coffee";
 	std::string filename = "GI.hdr";
 	unsigned int SPP = 8192;
 
@@ -102,6 +102,7 @@ int main(int argc, char* argv[]) {
 		if (accumulatedTime >= 1.f) {
 			// Calculates FPS and Average Frame Time (in milliseconds)
 			printf("FPS: %d (%.2f) | Avg Frame Time: %.2fms (t = %fs)\n", framesThisSecond, 1.f / t, (accumulatedTime / framesThisSecond) * 1000.f, t);
+			printf("SPP: %d\n", rt.getSPP());
 			
 			// Reset for the next second
 			accumulatedTime = 0.f;

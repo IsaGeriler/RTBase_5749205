@@ -371,7 +371,7 @@ public:
 	}
 };
 
-// Done 90% Sure
+// Done 100% Sure
 class GlassBSDF : public BSDF {
 public:
 	Texture* albedo;
@@ -544,7 +544,7 @@ public:
 	}
 };
 
-// Done 90% Sure
+// Done 100% Sure
 class OrenNayarBSDF : public BSDF {
 public:
 	Texture* albedo;
