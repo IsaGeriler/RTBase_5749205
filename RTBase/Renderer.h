@@ -51,6 +51,8 @@ public:
 // First pass
 // – Trace a small number of well distributed paths from the light
 // – Store a VPL data at each interaction
+// Virtual Point Lights
+// – Tuple of values: (VPL Position, Surface Normal at VPL, BSDF at VPL position, VPL Emitted Radiance)
 
 // Use quasi random sequences for tracing paths
 float haltonSequence(unsigned int base, unsigned int index) {
@@ -64,9 +66,6 @@ float haltonSequence(unsigned int base, unsigned int index) {
 	}
 	return result;
 }
-
-// Virtual Point Lights
-// – Tuple of values: (VPL Position, Surface Normal at VPL, BSDF at VPL position, VPL Emitted Radiance)
 
 // Second pass (can be parallelized)
 // – Trace a path from the camera to the first non-specular vertex
@@ -520,7 +519,8 @@ public:
 								Colour col = pathTrace(ray, samplers);
 								if (std::isnan(col.r) || std::isnan(col.g) || std::isnan(col.b)) col = Colour(0.f, 0.f, 0.f);
 								if (std::isinf(col.r) || std::isinf(col.g) || std::isinf(col.b)) col = Colour(0.f, 0.f, 0.f);
-								
+								if (col.Lum() > 10.f) col = col * (10.f / col.Lum());
+
 								film->splat(px, py, col);
 								unsigned char r, g, b;
 								film->tonemap(x, y, r, g, b, 2.f);

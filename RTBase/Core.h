@@ -15,12 +15,14 @@
 
 // Balance Heuristics for MIS (Multiple Importance Sampling)
 float balanceHeuristics(float pj, float pk) {
+	if (pj + pk <= 0.f) return 0.f;
 	return (pj / (pj + pk));
 }
 
 // Power Heuristics for MIS (Multiple Importance Sampling)
 // Beta is adjustable, but is usually 2
 float powerHeuristics(float pj, float pk, int beta = 2) {
+	if (pj + pk <= 0.f) return 0.f;
 	return powf(pj, beta) / (powf(pj, beta) + powf(pk, beta));
 }
 

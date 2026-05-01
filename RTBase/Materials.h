@@ -402,7 +402,7 @@ public:
 			// Refraction (Transmission)
 			float sinThetaI = std::max(sqrtf(1.f - powf(cosThetaI, 2)), 0.f);
 			float sin2ThetaT = powf(IOR * sinThetaI, 2);
-			if (sin2ThetaT > 1.f) {
+			if (sin2ThetaT >= 1.f) {
 				// Total Internal Reflection
 				pdf = 1.f;
 				Vec3 wr(-woLocal.x, -woLocal.y, woLocal.z);
@@ -632,40 +632,29 @@ public:
 
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf) {
 		Vec3 wo = shadingData.frame.toLocal(shadingData.wo);
-		Vec3 wr(-wo.x, -wo.y, wo.z);
-		Vec3 wi;
-
-		// e, ks and kd
-		float cosTheta = wo.z;
-		float e = alphaToPhongExponent();
-		float ks = ShadingHelper::fresnelDielectric(cosTheta, intIOR, extIOR);
-		float kd = 1.f - ks;
-
-		// Can sample only visible normal from wo
-		if (wo.z < 0.f) {
+		if (wo.z <= 0.f) {
 			pdf = 0.f;
 			reflectedColour = Colour(0.f, 0.f, 0.f);
 			return Vec3(0.f, 0.f, 0.f);
 		}
-
-		if (alpha < EPSILON) {
-			// Treat as a mirror with Conductor Fresnel
-			pdf = 1.f;
-			Vec3 wi(-wo.x, -wo.y, wo.z);
-			float F = ShadingHelper::fresnelDielectric(wi.z, intIOR, extIOR);
-			reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) * F / wi.z;
-			return shadingData.frame.toWorld(wi);
-		}
+		
+		// ks and kd
+		float ks = ShadingHelper::fresnelDielectric(wo.z, intIOR, extIOR);
+		float kd = 1.f - ks;
 
 		// Random Variables
 		float r1 = sampler->next();
 		float r2 = sampler->next();
 
+		// Glossy Part of Material
+		Vec3 wi;
 		if (sampler->next() < ks) {
-			// Glossy Part of Material
 			// Sample a lobe
+			float e = alphaToPhongExponent();
 			float thetaLobe = acosf(powf(r1, 1.f / (e + 1)));
-			float phiLobe = 2 * M_PI * r2;
+			float phiLobe = 2.f * M_PI * r2;
+
+			Vec3 wr(-wo.x, -wo.y, wo.z);
 			Vec3 wLobe = SphericalCoordinates::sphericalToWorld(thetaLobe, phiLobe);
 
 			// Create a frame along wr
@@ -674,46 +663,31 @@ public:
 
 			// Rotate vector along the frame
 			wi = Rwr.toWorld(wLobe);
+		}
+		// Diffuse Part of Material
+		else wi = SamplingDistributions::cosineSampleHemisphere(r1, r2);
 
-			// PDF and BSDF
-			pdf = ks * (((e + 1) / (2 * M_PI)) * powf(std::max(Dot(wr, wi), 0.f), e));
-			float glossyBSDFEval = ((e + 2) / (2 * M_PI)) * powf(std::max(Dot(wr, wi), 0.f), e);
-			Colour glossyBSDF(glossyBSDFEval, glossyBSDFEval, glossyBSDFEval);
-			reflectedColour = glossyBSDF * ks;
-			return wi;
-		}
-		else {
-			// Diffuse Part of Material
-			wi = SamplingDistributions::cosineSampleHemisphere(r1, r2);
-			pdf = wi.z * M_1_PI * kd;
-			reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) * M_1_PI * kd;
-			return shadingData.frame.toWorld(wi);
-		}
+		// PDF and BSDF
+		wi = shadingData.frame.toWorld(wi);
+		pdf = PDF(shadingData, wi);
+		reflectedColour = evaluate(shadingData, wi);
+		return wi;
 	}
 
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi) {
 		Vec3 wiLocal = shadingData.frame.toLocal(wi);
 		Vec3 woLocal = shadingData.frame.toLocal(shadingData.wo);
+
+		if (wiLocal.z <= 0.f || woLocal.z <= 0.f) return Colour(0.f, 0.f, 0.f);
 		Vec3 wr(-woLocal.x, -woLocal.y, woLocal.z);
 
 		// e, ks and kd
-		float cosTheta = woLocal.z;
 		float e = alphaToPhongExponent();
-		float ks = ShadingHelper::fresnelDielectric(cosTheta, intIOR, extIOR);
+		float ks = ShadingHelper::fresnelDielectric(woLocal.z, intIOR, extIOR);
 		float kd = 1.f - ks;
 
-		// Can sample only visible normal from wo
-		if (woLocal.z < 0.f) return Colour(0.f, 0.f, 0.f);
-
-		// If alpha < epsilon, treat as a mirror with Conductor Fresnel
-		if (alpha < EPSILON) {
-			Vec3 wi(-woLocal.x, -woLocal.y, woLocal.z);
-			float F = ShadingHelper::fresnelDielectric(wi.z, intIOR, extIOR);
-			return albedo->sample(shadingData.tu, shadingData.tv) * F / wi.z;
-		}
-
 		// PhongBSDF = kd * DiffuseBSDF + ks * GlossyBSDF
-		float glossyBSDFEval = ((e + 2) / (2 * M_PI)) * powf(std::max(Dot(wr, wiLocal), 0.f), e);
+		float glossyBSDFEval = ((e + 2.f) / (2.f * M_PI)) * powf(std::max(Dot(wiLocal, wr), 0.f), e);
 		Colour diffuseBSDF = albedo->sample(shadingData.tu, shadingData.tv) * M_1_PI;
 		Colour glossyBSDF(glossyBSDFEval, glossyBSDFEval, glossyBSDFEval);
 		return diffuseBSDF * kd + glossyBSDF * ks;
@@ -722,24 +696,17 @@ public:
 	float PDF(const ShadingData& shadingData, const Vec3& wi) {
 		Vec3 wiLocal = shadingData.frame.toLocal(wi);
 		Vec3 woLocal = shadingData.frame.toLocal(shadingData.wo);
+
+		if (wiLocal.z <= 0.f || woLocal.z <= 0.f) return 0.f;
 		Vec3 wr(-woLocal.x, -woLocal.y, woLocal.z);
 
 		// e, ks and kd
-		float cosTheta = woLocal.z;
 		float e = alphaToPhongExponent();
-		float ks = ShadingHelper::fresnelDielectric(cosTheta, intIOR, extIOR);
+		float ks = ShadingHelper::fresnelDielectric(woLocal.z, intIOR, extIOR);
 		float kd = 1.f - ks;
 
-		// Can sample only visible normal from wo
-		if (woLocal.z < 0.f) return 0.f;
-
-		if (alpha < EPSILON) {
-			// Treat as a mirror with Conductor Fresnel
-			return ShadingHelper::fresnelDielectric(wr.z, intIOR, extIOR);
-		}
-
 		// PDF
-		return (kd * (wi.z * M_1_PI)) + (ks * ((e + 1) / (2 * M_PI)) * powf(std::max(Dot(wr, wiLocal), 0.f), e));
+		return kd * (wiLocal.z * M_1_PI) + ks * ((e + 1.f) / (2.f * M_PI)) * powf(std::max(Dot(wiLocal, wr), 0.f), e);
 	}
 
 	bool isPureSpecular() {
