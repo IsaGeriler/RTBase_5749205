@@ -114,6 +114,26 @@ public:
 		return lights[index];
 	}
 
+	// Adding this function for Light Trace Algorithm
+	Light* sampleWeightedLight(Sampler* sampler, float& pmf) {
+		// Calculate power of every light and get the sum of the powers
+		int size = lights.size();
+		float sum = 0.f;
+		float pdf;
+
+		std::vector<float> lightPowers(size);
+		for (int i = 0; i < size; i++) {
+			lightPowers[i] = lights[i]->totalIntegratedPower();
+			sum += lightPowers[i];
+		}
+
+		// Need to sample from 1D distribution
+		Distribution1D dist(lightPowers, size);
+		int index = dist.sampleDiscrete(sampler->next(), pdf);
+		pmf = lights[index]->totalIntegratedPower() / sum;
+		return lights[index];
+	}
+
 	// Do not modify any code below this line
 	void init(std::vector<Triangle> meshTriangles, std::vector<BSDF*> meshMaterials, Light* _background) {
 		for (int i = 0; i < meshTriangles.size(); i++) {

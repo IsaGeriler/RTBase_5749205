@@ -51,20 +51,30 @@ public:
 // First pass
 // – Trace a small number of well distributed paths from the light
 // – Store a VPL data at each interaction
-// – Use quasi random sequences for tracing paths
+
+// Use quasi random sequences for tracing paths
+float haltonSequence(unsigned int base, unsigned int index) {
+	float result = 0.f;
+	float digitWeight = 1.f;
+	while (index > 0) {
+		digitWeight /= (float)base;
+		unsigned int modulo = index % base;
+		result += (float)modulo * digitWeight;
+		index /= base;
+	}
+	return result;
+}
 
 // Virtual Point Lights
 // – Tuple of values: (VPL Position, Surface Normal at VPL, BSDF at VPL position, VPL Emitted Radiance)
 
 // Second pass (can be parallelized)
-// – Trace a path from the camera to the first nonspecular vertex
+// – Trace a path from the camera to the first non-specular vertex
 // – Calculate direct light from each VPL
 // For each pixel
 // • Trace ray
 // • Iterate over all stored VPLs
 // • Compute Contribution
-
-// Instant Radiosity
 // Handle direct lighting as usual
 // Sum over Nvpl lights can be expensive
 // – How big should it be ?
@@ -277,7 +287,7 @@ public:
 		// Handles starting a light path
 		// Sample a light source
 		float pmf;
-		Light* light = scene->sampleLight(sampler, pmf);
+		Light* light = scene->sampleWeightedLight(sampler, pmf);
 		Colour pathThroughput(1.f, 1.f, 1.f);
 
 		// Area Light
@@ -409,7 +419,6 @@ public:
 		filter.set("hdr", true);
 		filter.commit();
 
-		unsigned int pixels = film->width * film->height;
 		float* albedoPtr = (float*)albedoBuf.getData();
 		for (unsigned int i = 0; i < pixels; i++) {
 			albedoPtr[(i * 3)] = albedoFilm->film[i].r;
