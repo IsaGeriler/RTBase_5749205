@@ -699,8 +699,8 @@ public:
 
 		for (unsigned int y = 0; y < film->height; y++) {
 			for (unsigned int x = 0; x < film->width; x++) {
-				float px = x + haltonSamplers->next();  // + 0.5f;
-				float py = y + haltonSamplers->next();  // + 0.5f;
+				float px = x + haltonSamplers->next();
+				float py = y + haltonSamplers->next();
 				Ray ray = scene->camera.generateRay(px, py);
 
 				// Check for NaN and Inf Values
