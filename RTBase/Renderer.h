@@ -1,6 +1,6 @@
 #pragma once
 
-#define MAX_VPLS 25
+#define MAX_VPLS 100
 
 #include <cmath>
 #include <functional>
@@ -336,7 +336,7 @@ public:
 	// – Store information at each intersection: Virtual Point Light (VPL)
 	// – Calculate contribution from each VPL to points visible from the camera
 	std::vector<VPL> VPLs;
-	Colour vplContribution(Ray& r) {
+	Colour contributeVPL(Ray& r) {
 		Colour contribution;
 		IntersectionData intersection = scene->traverse(r);
 		ShadingData shadingData = scene->calculateShadingData(intersection, r);
@@ -385,13 +385,13 @@ public:
 
 				// Create a ray starting at p in direction wi and then call lightTracePath
 				Ray r(p + (wi * EPSILON), wi);
-				instantRadiositySecondPass(r, pathThroughput, col, sampler, 0);
+				traceVPLRecursive(r, pathThroughput, col, sampler, 0);
 				sampler->reset();
 			}
 		}
 	}
 	
-	void instantRadiositySecondPass(Ray& r, Colour pathThroughput, Colour Le, HaltonSampler* sampler, int depth) {
+	void traceVPLRecursive(Ray& r, Colour pathThroughput, Colour Le, HaltonSampler* sampler, int depth) {
 		// Handles tracing the rest of the light path
 		IntersectionData intersection = scene->traverse(r);
 		ShadingData shadingData = scene->calculateShadingData(intersection, r);
@@ -419,7 +419,7 @@ public:
 				else return;
 			}
 			sampler->reset();
-			instantRadiositySecondPass(indirectRay, pathThroughput, Le, sampler, depth + 1);
+			traceVPLRecursive(indirectRay, pathThroughput, Le, sampler, depth + 1);
 		}
 	}
 
@@ -704,14 +704,15 @@ public:
 				Ray ray = scene->camera.generateRay(px, py);
 
 				// Check for NaN and Inf Values
-				Colour col = vplContribution(ray);
+				Colour col = contributeVPL(ray);
 				if (std::isnan(col.r) || std::isnan(col.g) || std::isnan(col.b)) col = Colour(0.f, 0.f, 0.f);
 				if (std::isinf(col.r) || std::isinf(col.g) || std::isinf(col.b)) col = Colour(0.f, 0.f, 0.f);
 				film->splat(px, py, col);
+
 				unsigned char r, g, b;
 				film->tonemap(x, y, r, g, b, 2.f);
 				canvas->draw(x, y, r, g, b);
-				haltonSamplers->reset();
+				
 			}
 		}
 	}
