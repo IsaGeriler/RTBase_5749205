@@ -18,6 +18,7 @@
 #include "Materials.h"
 #include "Sampling.h"
 #include "Scene.h"
+#include <vector>
 
 struct ScreenTile {
 	unsigned int tile_x{ 0 }, tile_y{ 0 };
@@ -213,7 +214,7 @@ public:
 		return scene->background->evaluate(r.dir) * pathThroughput;
 	}
 
-	// Light Tracing
+	// --- Light Trace Start ---
 	// Recheck... probably something is wrong here as only Cornell Box works properly
 	void connectToCamera(Vec3 p, Vec3 n, Colour col) {
 		// Handle connections to camera
@@ -328,9 +329,9 @@ public:
 			lightTracePath(indirectRay, pathThroughput, Le, sampler, depth + 1);
 		}
 	}
+	// --- Light Trace End ---
 
 	// --- Instant Radiosity Start ---
-	std::vector<VPL> VPLs;
 	Colour instantRadiosity(Ray& r, HaltonSampler* sampler) {
 		IntersectionData intersection = scene->traverse(r);
 		ShadingData shadingData = scene->calculateShadingData(intersection, r);
@@ -340,6 +341,7 @@ public:
 			}
 			// Compute Direct
 			Colour direct = computeDirectVPL(shadingData, sampler);
+			sampler->reset();
 
 			// Compute VPL Contribution
 			Colour vplContribution = contributeVPL(shadingData);
@@ -349,6 +351,9 @@ public:
 		}
 		return scene->background->evaluate(r.dir);
 	}
+
+	// Vector for storing VPL
+	std::vector<VPL> VPLs;
 	
 	// Handle VPL Contribution
 	Colour contributeVPL(ShadingData& shadingData) {
@@ -413,7 +418,6 @@ public:
 				if (pdf <= 0) return Colour(0.f, 0.f, 0.f);
 				return emission * BSDF * gTerm * w / pLight;
 			}
-			sampler->reset();
 			return Colour(0.f, 0.f, 0.f);
 		}
 	}
@@ -431,9 +435,7 @@ public:
 				// Sample point and direction from on light source
 				float pdfDirection, pdfPosition;
 				Vec3 p = light->samplePositionFromLight(sampler, pdfPosition);
-				sampler->reset();
 				Vec3 wi = light->sampleDirectionFromLight(sampler, pdfDirection);
-				sampler->reset();
 
 				// Evaluate colour from direction
 				Colour col = light->evaluate(-wi) / (pdfPosition * pdfDirection * pmf * MAX_VPLS);
@@ -442,6 +444,7 @@ public:
 				Ray r(p + (wi * EPSILON), wi);
 				traceVPLRecursive(r, pathThroughput, col, sampler, 0);
 			}
+			sampler->reset();
 		}
 	}
 	
@@ -468,14 +471,15 @@ public:
 			// Apply Russian Roulette
 			if (depth >= 3) {
 				float rrp = std::min(pathThroughput.Lum(), 0.95f);
-				if (sampler->next() < rrp) pathThroughput = pathThroughput / rrp;
+				if (sampler->next() < rrp) {
+					pathThroughput = pathThroughput / rrp;
+				}
 				else return;
 			}
 			sampler->reset();
 			traceVPLRecursive(indirectRay, pathThroughput, Le, sampler, depth + 1, shadingData.bsdf->isPureSpecular());
 		}
 	}
-
 	// --- Instant Radiosity End ---
 
 	Colour albedo(Ray& r) {
@@ -766,10 +770,11 @@ public:
 				// Check for NaN and Inf Values
 				Colour col = instantRadiosity(ray, haltonSamplers);
 				haltonSamplers->reset();
+
 				if (std::isnan(col.r) || std::isnan(col.g) || std::isnan(col.b)) col = Colour(0.f, 0.f, 0.f);
 				if (std::isinf(col.r) || std::isinf(col.g) || std::isinf(col.b)) col = Colour(0.f, 0.f, 0.f);
+				
 				film->splat(px, py, col);
-
 				unsigned char r, g, b;
 				film->tonemap(x, y, r, g, b, 2.f);
 				canvas->draw(x, y, r, g, b);

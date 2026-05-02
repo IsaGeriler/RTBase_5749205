@@ -22,7 +22,7 @@ Materials: DiffuseBSDF
 
 Lighting: Area Light
 
-Note: Symmetric scattering artifact can be seen, as Halton Sampling was tried to be implemented for using quasi random sequence for tracing paths.
+Sampler Used: Halton Sampler (from Halton Sequence)
 
 <img alt="CornellBox" src="Images/InstantRadiosityCornellBox.png" />
 
