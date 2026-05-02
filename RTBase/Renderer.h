@@ -332,6 +332,9 @@ public:
 	// --- Light Trace End ---
 
 	// --- Instant Radiosity Start ---
+	// Vector for storing VPL
+	std::vector<VPL> VPLs;
+
 	Colour instantRadiosity(Ray& r, HaltonSampler* sampler) {
 		IntersectionData intersection = scene->traverse(r);
 		ShadingData shadingData = scene->calculateShadingData(intersection, r);
@@ -351,14 +354,11 @@ public:
 		}
 		return scene->background->evaluate(r.dir);
 	}
-
-	// Vector for storing VPL
-	std::vector<VPL> VPLs;
 	
 	// Handle VPL Contribution
 	Colour contributeVPL(ShadingData& shadingData) {
 		Colour contribution;
-		for (unsigned int i = 0; i < MAX_VPLS; i++) {
+		for (unsigned int i = 0; i < VPLs.size(); i++) {
 			Vec3 wi = (VPLs[i].shadingData.x - shadingData.x).normalize();
 			Vec3 wiVPL = -wi;
 
@@ -369,10 +369,7 @@ public:
 				// BSDF for VPL Contribution
 				Colour BSDF = shadingData.bsdf->evaluate(shadingData, wi);
 				Colour vplBSDF = VPLs[i].shadingData.bsdf->evaluate(VPLs[i].shadingData, wiVPL);
-
-				// To avoid light explosions, such as at the kitchen scene
-				if (VPLs[i].shadingData.bsdf->isLight()) contribution = contribution + (vplBSDF * VPLs[i].Le * gTerm);
-				else contribution = contribution + (BSDF * vplBSDF * VPLs[i].Le * gTerm);
+				contribution = contribution + (BSDF * vplBSDF * VPLs[i].Le * gTerm);
 			}
 		}
 		return contribution;
@@ -453,8 +450,7 @@ public:
 		IntersectionData intersection = scene->traverse(r);
 		ShadingData shadingData = scene->calculateShadingData(intersection, r);
 		if (shadingData.t < FLT_MAX) {
-			if (shadingData.bsdf->isLight()) return;
-
+			if (shadingData.bsdf->isLight()) { if (depth == 0 || isSpecular) return; }
 			// Store a VPL
 			VPL vpl(shadingData, pathThroughput * Le);
 			VPLs.emplace_back(vpl);
@@ -563,12 +559,13 @@ public:
 
 	void render() {
 		// General Render Function to Select Desired Rendering Method
-		int renderMode = 4;
+		int renderMode = 5;
 		if (renderMode == 0) renderSequential();
 		if (renderMode == 1) renderMultithread();
 		if (renderMode == 2) renderMultithreadDenoise();
 		if (renderMode == 3) renderLightTrace();
-		if (renderMode == 4) renderInstantRadiosity();
+		if (renderMode == 4) renderInstantRadiositySequential();
+		if (renderMode == 5) renderInstantRadiosityMultithread();
 	}
 
 	void renderSequential() {
@@ -747,7 +744,7 @@ public:
 		}
 	}
 
-	void renderInstantRadiosity() {
+	void renderInstantRadiositySequential() {
 		// Sequential Rendering
 		film->incrementSPP();
 
@@ -759,7 +756,6 @@ public:
 
 		// Reset Halton Sampler (for pixel calculations)
 		haltonSamplers->hardReset();
-
 		for (unsigned int y = 0; y < film->height; y++) {
 			for (unsigned int x = 0; x < film->width; x++) {
 				// Using Mersenne Twister for plotting pixels, as Halton Sequence causes either aliasing
@@ -774,13 +770,85 @@ public:
 
 				if (std::isnan(col.r) || std::isnan(col.g) || std::isnan(col.b)) col = Colour(0.f, 0.f, 0.f);
 				if (std::isinf(col.r) || std::isinf(col.g) || std::isinf(col.b)) col = Colour(0.f, 0.f, 0.f);
-				
+
 				film->splat(px, py, col);
 				unsigned char r, g, b;
 				film->tonemap(x, y, r, g, b, 2.f);
 				canvas->draw(x, y, r, g, b);
 			}
 		}
+	}
+
+	void renderInstantRadiosityMultithread() {
+		// Multithreaded Rendering
+		film->incrementSPP();
+		std::mutex mtx;
+		std::vector<std::thread> thread_pool;
+		std::atomic<int> atomic_id_counter = 0;
+		thread_pool.reserve(numProcs);
+		
+		// Reset Halton Sampler
+		haltonSamplers->hardReset();
+
+		// Trace and Generate VPLs for Instant Radiosity
+		traceVPL(haltonSamplers);
+
+		// Reset Halton Sampler (for pixel calculations)
+		haltonSamplers->hardReset();
+
+		unsigned int tile_size = 32;
+		unsigned int tile_count = (unsigned int)(std::ceil((film->width + tile_size - 1) / tile_size) * std::ceil((film->height + tile_size - 1) / tile_size));
+
+		for (unsigned int i = 0; i < numProcs; ++i) {
+			thread_pool.emplace_back([&]() {
+				// Work function
+				ScreenTile screen_tile;
+				unsigned int tile_id = 0;
+
+				while ((tile_id = atomic_id_counter.fetch_add(1)) < tile_count) {
+					// Initialize ScreenTile structure's attributes
+					{
+						std::lock_guard<std::mutex> lock(mtx);
+						screen_tile.tile_x = (tile_id % (unsigned int)std::ceil((film->width + tile_size - 1) / tile_size)) * tile_size;
+						screen_tile.tile_y = (tile_id / (unsigned int)std::ceil((film->width + tile_size - 1) / tile_size)) * tile_size;
+						screen_tile.tile_size = tile_size;
+						screen_tile.is_tile_rendered = false;
+					}
+
+					if (!screen_tile.is_tile_rendered.load(std::memory_order_relaxed)) {
+						for (unsigned int y = screen_tile.tile_y_start(); y <= screen_tile.tile_y_end(film); ++y) {
+							for (unsigned int x = screen_tile.tile_x_start(); x <= screen_tile.tile_x_end(film); ++x) {
+								float px = x + samplers->next();  // + 0.5f;
+								float py = y + samplers->next();  // + 0.5f;
+								Ray ray = scene->camera.generateRay(px, py);
+
+								// Check for NaN and Inf Values
+								Colour col = instantRadiosity(ray, haltonSamplers);
+								haltonSamplers->reset();
+								if (std::isnan(col.r) || std::isnan(col.g) || std::isnan(col.b)) col = Colour(0.f, 0.f, 0.f);
+								if (std::isinf(col.r) || std::isinf(col.g) || std::isinf(col.b)) col = Colour(0.f, 0.f, 0.f);
+								if (col.Lum() > 10.f) col = col * (10.f / col.Lum());
+
+								film->splat(px, py, col);
+								unsigned char r, g, b;
+								film->tonemap(x, y, r, g, b, 2.f);
+								canvas->draw(x, y, r, g, b);
+							}
+						}
+
+						// Tile rendered, update is_tile_rendered flag
+						{
+							std::lock_guard<std::mutex> lock(mtx);
+							screen_tile.is_tile_rendered.store(true);
+						}
+					}
+				}
+			});
+		}
+
+		// Join the threads to ensure work completed
+		for (auto& thread : thread_pool)
+			thread.join();
 	}
 
 	int getSPP() {
