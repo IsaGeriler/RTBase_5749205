@@ -27,6 +27,32 @@ public:
 	}
 };
 
+// Halton Sampler Inspired from "Halton Low-Discrepancy Sequence [Shaders Monthly #12]": https://youtu.be/N6xZvrLusPI
+class HaltonSampler : public Sampler {
+private:
+	// Attributes
+	unsigned int base = 2u;
+	unsigned int index = 1u;
+
+	// Method
+	// Note: Use quasi random sequences for tracing paths at Instant Radiosity
+	float haltonSequence(unsigned int base, unsigned int index) {
+		float result = 0.f;
+		float digitWeight = 1.f;
+		while (index > 0u) {
+			digitWeight /= (float)base;
+			unsigned int modulo = index % base;
+			result += (float)modulo * digitWeight;
+			index /= base;
+		}
+		return result;
+	}
+public:
+	float next() { return haltonSequence(base++, index); }  // Increase the base at each function call
+	void reset() { base = 2u; index += 1u; }				// To increase the index, while resetting the base to 2
+	void hardReset() { base = 2u; index = 1u; }				// To fully resetting the index to 1, and the base to 2
+};
+
 // Note all of these distributions assume z-up coordinate system
 class SamplingDistributions {
 public:

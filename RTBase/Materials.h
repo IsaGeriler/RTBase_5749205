@@ -610,7 +610,7 @@ public:
 	}
 };
 
-// Done PhongBSDF, 75% Sure
+// Done PhongBSDF, 90% Sure
 class PlasticBSDF : public BSDF {
 public:
 	Texture* albedo;

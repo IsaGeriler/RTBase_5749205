@@ -1,5 +1,7 @@
 #pragma once
 
+#define MAX_VPLS 10
+
 #include <cmath>
 #include <functional>
 #include <iostream>
@@ -42,54 +44,12 @@ public:
 	VPL(ShadingData _shadingData, Colour _Le) : shadingData(_shadingData), Le(_Le) {}
 };
 
-// Concept
-// – Trace a small number of well distributed paths from the light
-// – Store information at each intersection
-//	 • Virtual Point Light (VPL)
-// – Calculate contribution from each VPL to points visible from the camera
-
-// First pass
-// – Trace a small number of well distributed paths from the light
-// – Store a VPL data at each interaction
-// Virtual Point Lights
-// – Tuple of values: (VPL Position, Surface Normal at VPL, BSDF at VPL position, VPL Emitted Radiance)
-
-// Use quasi random sequences for tracing paths
-float haltonSequence(unsigned int base, unsigned int index) {
-	float result = 0.f;
-	float digitWeight = 1.f;
-	while (index > 0) {
-		digitWeight /= (float)base;
-		unsigned int modulo = index % base;
-		result += (float)modulo * digitWeight;
-		index /= base;
-	}
-	return result;
-}
-
-// Second pass (can be parallelized)
-// – Trace a path from the camera to the first non-specular vertex
-// – Calculate direct light from each VPL
-// For each pixel
-// • Trace ray
-// • Iterate over all stored VPLs
-// • Compute Contribution
-// Handle direct lighting as usual
-// Sum over Nvpl lights can be expensive
-// – How big should it be ?
-// Interleaved sampling and filtering can improve
-
-// Unbiased but artifacts
-// – Structured noise
-// – Weak singularity in the Geometry Term
-// – Cannot capture caustics
-// Equivalent to Bidirectional Path Tracing for t = 1 and shared light paths
-
 class RayTracer {
 public:
 	Scene* scene;
 	GamesEngineeringBase::Window* canvas;
 	MTRandom* samplers;
+	HaltonSampler* haltonSamplers;  // For Instant Radiosity
 	std::thread** threads;
 	int numProcs;
 
@@ -116,6 +76,7 @@ public:
 		numProcs = sysInfo.dwNumberOfProcessors;
 		threads = new std::thread * [numProcs];
 		samplers = new MTRandom[numProcs];
+		haltonSamplers = new HaltonSampler[numProcs];  // For Instant Radiosity
 		
 		clear();
 	}
@@ -369,7 +330,106 @@ public:
 	}
 
 	// Instant Radiosity
-	// TO:DO
+	// This is almost the same as Light Trace with VPLs...
+	// Concept
+	// – Trace a small number of well distributed paths from the light
+	// – Store information at each intersection: Virtual Point Light (VPL)
+	// – Calculate contribution from each VPL to points visible from the camera
+	std::vector<VPL> VPLs;
+	Colour vplContribution(ShadingData& shadingData) {
+		// Handle VPL Contribution
+		Colour contribution;
+		for (unsigned int i = 0; i < MAX_VPLS; i++) {
+			Vec3 wi = (VPLs[i].shadingData.x - shadingData.x).normalize();
+			Vec3 wiVPL = -wi;
+			
+			if (scene->visible(shadingData.x, VPLs[i].shadingData.x)) {
+				// GTerm
+				float gTerm = std::max(Dot(shadingData.sNormal, wi), 0.f) * std::max(Dot(VPLs[i].shadingData.sNormal, wiVPL), 0.f) / (shadingData.x - VPLs[i].shadingData.x).lengthSq();
+				
+				// Handle Direct Lighting as usual
+				Colour BSDF = shadingData.bsdf->evaluate(shadingData, wi);
+				Colour vplBSDF = VPLs[i].shadingData.bsdf->evaluate(VPLs[i].shadingData, wiVPL);
+				contribution = contribution + (BSDF * vplBSDF * VPLs[i].Le * gTerm);
+			}
+		}
+		return contribution;
+	}
+
+	// Scrape Environment Map for now...
+	// First pass
+	// – Trace a small number of well distributed paths from the light
+	// – Store a VPL data at each interaction
+	// Virtual Point Lights – Tuple of values: (VPL Position, Surface Normal at VPL, BSDF at VPL position, VPL Emitted Radiance)
+	void instantRadiosityFirstPass(HaltonSampler* sampler) {
+		sampler->hardReset();
+		for (unsigned int i = 0; i < MAX_VPLS; i++) {
+			// Handles starting a light path
+			// Sample a light source
+			float pmf;
+			Light* light = scene->sampleWeightedLight(sampler, pmf);
+			Colour pathThroughput(1.f, 1.f, 1.f);
+
+			// Area Light
+			if (light->isArea()) {
+				// Sample point and direction from on light source
+				float pdfDirection, pdfPosition;
+				Vec3 p = light->samplePositionFromLight(sampler, pdfPosition);
+				Vec3 wi = light->sampleDirectionFromLight(sampler, pdfDirection);
+
+				// Evaluate colour from direction
+				Colour col = light->evaluate(-wi) / pdfPosition * pmf;
+				
+				// Create a ray starting at p in direction wi and then call lightTracePath
+				Ray r(p + (wi * EPSILON), wi);
+				instantRadiositySecondPass(r, pathThroughput, col, sampler, 0);
+				sampler->reset();
+			}
+		}
+	}
+
+	// Second pass (can be parallelized)
+	// – Trace a path from the camera to the first non-specular vertex
+	// – Calculate direct light from each VPL
+	// For each pixel
+	// • Trace ray
+	// • Iterate over all stored VPLs
+	// • Compute Contribution
+	// Handle direct lighting as usual
+	// Sum over Nvpl lights can be expensive
+	// – How big should it be ?
+	// Interleaved sampling and filtering can improve
+	void instantRadiositySecondPass(Ray& r, Colour pathThroughput, Colour Le, HaltonSampler* sampler, int depth) {
+		// Handles tracing the rest of the light path
+		IntersectionData intersection = scene->traverse(r);
+		ShadingData shadingData = scene->calculateShadingData(intersection, r);
+		if (depth == 0) sampler->hardReset();
+		if (shadingData.t < FLT_MAX) {
+			if (shadingData.bsdf->isLight()) return;
+			// Store a VPL
+			VPL vpl(shadingData, pathThroughput);
+			VPLs.emplace_back(vpl);
+
+			// IndirectBSDF
+			float pdf;
+			Colour indirect;
+			Vec3 wi = shadingData.bsdf->sample(shadingData, sampler, indirect, pdf);
+			Ray indirectRay(shadingData.x + (wi * EPSILON), wi);
+
+			// Update path throughput (multiply with IndirectBSDF and cosine, divide by pdf)
+			float cosine = std::max(Dot(wi, shadingData.sNormal), EPSILON);
+			pathThroughput = pathThroughput * indirect * cosine / pdf;
+
+			// Apply Russian Roulette
+			if (depth >= 3) {
+				float rrp = std::min(pathThroughput.Lum(), 0.95f);
+				if (sampler->next() < rrp) pathThroughput = pathThroughput / rrp;
+				else return;
+			}
+			sampler->reset();
+			instantRadiositySecondPass(indirectRay, pathThroughput, Le, sampler, depth + 1);
+		}
+	}
 
 	Colour albedo(Ray& r) {
 		IntersectionData intersection = scene->traverse(r);
@@ -451,12 +511,12 @@ public:
 
 	void render() {
 		// General Render Function to Select Desired Rendering Method
-		int renderMode = 1;
+		int renderMode = 4;
 		if (renderMode == 0) renderSequential();
 		if (renderMode == 1) renderMultithread();
 		if (renderMode == 2) renderMultithreadDenoise();
 		if (renderMode == 3) renderLightTrace();
-		// if (renderMode == 4) renderInstantRadiosity();
+		if (renderMode == 4) renderInstantRadiosity();
 	}
 
 	void renderSequential() {
@@ -636,8 +696,21 @@ public:
 	}
 
 	void renderInstantRadiosity() {
-		// TO:DO
+		// Sequential Rendering
 		film->incrementSPP();
+		for (unsigned int y = 0; y < film->height; y++) {
+			for (unsigned int x = 0; x < film->width; x++) {
+				instantRadiosityFirstPass(haltonSamplers);
+			}
+		}
+
+		for (unsigned int y = 0; y < film->height; y++) {
+			for (unsigned int x = 0; x < film->width; x++) {
+				unsigned char r, g, b;
+				film->tonemap(x, y, r, g, b, 2.f);
+				canvas->draw(x, y, r, g, b);
+			}
+		}
 	}
 
 	int getSPP() {
