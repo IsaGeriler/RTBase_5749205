@@ -1,6 +1,6 @@
 #pragma once
 
-#define MAX_VPLS 10
+#define MAX_VPLS 25
 
 #include <cmath>
 #include <functional>
@@ -336,33 +336,36 @@ public:
 	// – Store information at each intersection: Virtual Point Light (VPL)
 	// – Calculate contribution from each VPL to points visible from the camera
 	std::vector<VPL> VPLs;
-	Colour vplContribution(ShadingData& shadingData) {
-		// Handle VPL Contribution
+	Colour vplContribution(Ray& r) {
 		Colour contribution;
-		for (unsigned int i = 0; i < MAX_VPLS; i++) {
-			Vec3 wi = (VPLs[i].shadingData.x - shadingData.x).normalize();
-			Vec3 wiVPL = -wi;
-			
-			if (scene->visible(shadingData.x, VPLs[i].shadingData.x)) {
-				// GTerm
-				float gTerm = std::max(Dot(shadingData.sNormal, wi), 0.f) * std::max(Dot(VPLs[i].shadingData.sNormal, wiVPL), 0.f) / (shadingData.x - VPLs[i].shadingData.x).lengthSq();
-				
-				// Handle Direct Lighting as usual
-				Colour BSDF = shadingData.bsdf->evaluate(shadingData, wi);
-				Colour vplBSDF = VPLs[i].shadingData.bsdf->evaluate(VPLs[i].shadingData, wiVPL);
-				contribution = contribution + (BSDF * vplBSDF * VPLs[i].Le * gTerm);
+		IntersectionData intersection = scene->traverse(r);
+		ShadingData shadingData = scene->calculateShadingData(intersection, r);
+		if (shadingData.t < FLT_MAX) {
+			if (shadingData.bsdf->isLight()) {
+				return shadingData.bsdf->emit(shadingData, shadingData.wo);
 			}
-		}
-		return contribution;
-	}
+			// Handle VPL Contribution
+			for (unsigned int i = 0; i < MAX_VPLS; i++) {
+				Vec3 wi = (VPLs[i].shadingData.x - shadingData.x).normalize();
+				Vec3 wiVPL = -wi;
 
-	// Scrape Environment Map for now...
-	// First pass
-	// – Trace a small number of well distributed paths from the light
-	// – Store a VPL data at each interaction
-	// Virtual Point Lights – Tuple of values: (VPL Position, Surface Normal at VPL, BSDF at VPL position, VPL Emitted Radiance)
-	void instantRadiosityFirstPass(HaltonSampler* sampler) {
+				if (scene->visible(shadingData.x, VPLs[i].shadingData.x)) {
+					// GTerm
+					float gTerm = std::max(Dot(shadingData.sNormal, wi), 0.f) * std::max(Dot(VPLs[i].shadingData.sNormal, wiVPL), 0.f) / (shadingData.x - VPLs[i].shadingData.x).lengthSq();
+
+					// Handle Direct Lighting as usual
+					Colour BSDF = shadingData.bsdf->evaluate(shadingData, wi);
+					Colour vplBSDF = VPLs[i].shadingData.bsdf->evaluate(VPLs[i].shadingData, wiVPL);
+					contribution = contribution + (BSDF * vplBSDF * VPLs[i].Le * gTerm);
+				}
+			}
+			return contribution;
+		}
+	}
+	
+	void traceVPL(HaltonSampler* sampler) {
 		sampler->hardReset();
+		VPLs.clear();
 		for (unsigned int i = 0; i < MAX_VPLS; i++) {
 			// Handles starting a light path
 			// Sample a light source
@@ -378,8 +381,8 @@ public:
 				Vec3 wi = light->sampleDirectionFromLight(sampler, pdfDirection);
 
 				// Evaluate colour from direction
-				Colour col = light->evaluate(-wi) / pdfPosition * pmf;
-				
+				Colour col = light->evaluate(-wi) / (pdfPosition * pdfDirection * pmf);
+
 				// Create a ray starting at p in direction wi and then call lightTracePath
 				Ray r(p + (wi * EPSILON), wi);
 				instantRadiositySecondPass(r, pathThroughput, col, sampler, 0);
@@ -387,18 +390,7 @@ public:
 			}
 		}
 	}
-
-	// Second pass (can be parallelized)
-	// – Trace a path from the camera to the first non-specular vertex
-	// – Calculate direct light from each VPL
-	// For each pixel
-	// • Trace ray
-	// • Iterate over all stored VPLs
-	// • Compute Contribution
-	// Handle direct lighting as usual
-	// Sum over Nvpl lights can be expensive
-	// – How big should it be ?
-	// Interleaved sampling and filtering can improve
+	
 	void instantRadiositySecondPass(Ray& r, Colour pathThroughput, Colour Le, HaltonSampler* sampler, int depth) {
 		// Handles tracing the rest of the light path
 		IntersectionData intersection = scene->traverse(r);
@@ -407,7 +399,7 @@ public:
 		if (shadingData.t < FLT_MAX) {
 			if (shadingData.bsdf->isLight()) return;
 			// Store a VPL
-			VPL vpl(shadingData, pathThroughput);
+			VPL vpl(shadingData, pathThroughput * Le);
 			VPLs.emplace_back(vpl);
 
 			// IndirectBSDF
@@ -698,17 +690,28 @@ public:
 	void renderInstantRadiosity() {
 		// Sequential Rendering
 		film->incrementSPP();
-		for (unsigned int y = 0; y < film->height; y++) {
-			for (unsigned int x = 0; x < film->width; x++) {
-				instantRadiosityFirstPass(haltonSamplers);
-			}
-		}
+
+		// Reset Halton Sampler
+		haltonSamplers->hardReset();
+
+		// Trace and Generate VPLs for Instant Radiosity
+		traceVPL(haltonSamplers);
 
 		for (unsigned int y = 0; y < film->height; y++) {
 			for (unsigned int x = 0; x < film->width; x++) {
+				float px = x + haltonSamplers->next();  // + 0.5f;
+				float py = y + haltonSamplers->next();  // + 0.5f;
+				Ray ray = scene->camera.generateRay(px, py);
+
+				// Check for NaN and Inf Values
+				Colour col = vplContribution(ray);
+				if (std::isnan(col.r) || std::isnan(col.g) || std::isnan(col.b)) col = Colour(0.f, 0.f, 0.f);
+				if (std::isinf(col.r) || std::isinf(col.g) || std::isinf(col.b)) col = Colour(0.f, 0.f, 0.f);
+				film->splat(px, py, col);
 				unsigned char r, g, b;
 				film->tonemap(x, y, r, g, b, 2.f);
 				canvas->draw(x, y, r, g, b);
+				haltonSamplers->reset();
 			}
 		}
 	}

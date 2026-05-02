@@ -16,6 +16,16 @@ Lighting: Area Light
 
 <img alt="CornellBox" src="Images/LightTraceCornellBox.png" />
 
+## Current Image of Cornell Box (Instant Radiosity)
+
+Materials: DiffuseBSDF
+
+Lighting: Area Light
+
+Note: Symmetric scattering artifact can be seen, as Halton Sampling was tried to be implemented for using quasi random sequence for tracing paths.
+
+<img alt="CornellBox" src="Images/InstantRadiosityCornellBox.png" />
+
 ## Current Image of Glass of Water
 
 Materials: ConductorBSDF, DiffuseBSDF, GlassBSDF
