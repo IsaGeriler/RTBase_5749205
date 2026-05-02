@@ -329,42 +329,96 @@ public:
 		}
 	}
 
-	// Instant Radiosity
-	// Recheck... probably something is wrong here...
+	// --- Instant Radiosity Start ---
 	std::vector<VPL> VPLs;
-	Colour contributeVPL(Ray& r) {
-		Colour contribution;
+	Colour instantRadiosity(Ray& r, HaltonSampler* sampler) {
 		IntersectionData intersection = scene->traverse(r);
 		ShadingData shadingData = scene->calculateShadingData(intersection, r);
 		if (shadingData.t < FLT_MAX) {
 			if (shadingData.bsdf->isLight()) {
 				return shadingData.bsdf->emit(shadingData, shadingData.wo);
 			}
-			// Handle VPL Contribution
-			for (unsigned int i = 0; i < VPLs.size(); i++) {
-				Vec3 wi = (VPLs[i].shadingData.x - shadingData.x).normalize();
-				Vec3 wiVPL = -wi;
+			// Compute Direct
+			Colour direct = computeDirectVPL(shadingData, sampler);
 
-				if (scene->visible(shadingData.x, VPLs[i].shadingData.x)) {
-					// GTerm
-					float gTerm = std::max(Dot(shadingData.sNormal, wi), 0.f) * std::max(Dot(VPLs[i].shadingData.sNormal, wiVPL), 0.f) / std::max((VPLs[i].shadingData.x - shadingData.x).lengthSq(), EPSILON);
+			// Compute VPL Contribution
+			Colour vplContribution = contributeVPL(shadingData);
 
-					// Handle Direct Lighting as usual
-					Colour BSDF = shadingData.bsdf->evaluate(shadingData, wi);
-					Colour vplBSDF = VPLs[i].shadingData.bsdf->evaluate(VPLs[i].shadingData, wiVPL);
-
-					// To avoid light explosions, such as at the kitchen scene
-					if (VPLs[i].shadingData.bsdf->isLight()) contribution = contribution + (vplBSDF * VPLs[i].Le * gTerm);
-					else contribution = contribution + (BSDF * vplBSDF * VPLs[i].Le * gTerm);
-				}
-			}
-			return contribution;
+			// BSDF = Direct + Contribution
+			return direct + vplContribution;
 		}
 		return scene->background->evaluate(r.dir);
 	}
 	
+	// Handle VPL Contribution
+	Colour contributeVPL(ShadingData& shadingData) {
+		Colour contribution;
+		for (unsigned int i = 0; i < MAX_VPLS; i++) {
+			Vec3 wi = (VPLs[i].shadingData.x - shadingData.x).normalize();
+			Vec3 wiVPL = -wi;
+
+			if (scene->visible(shadingData.x, VPLs[i].shadingData.x)) {
+				// GTerm
+				float gTerm = std::max(Dot(shadingData.sNormal, wi), 0.f) * std::max(Dot(VPLs[i].shadingData.sNormal, wiVPL), 0.f) / std::max((VPLs[i].shadingData.x - shadingData.x).lengthSq(), EPSILON);
+
+				// BSDF for VPL Contribution
+				Colour BSDF = shadingData.bsdf->evaluate(shadingData, wi);
+				Colour vplBSDF = VPLs[i].shadingData.bsdf->evaluate(VPLs[i].shadingData, wiVPL);
+
+				// To avoid light explosions, such as at the kitchen scene
+				if (VPLs[i].shadingData.bsdf->isLight()) contribution = contribution + (vplBSDF * VPLs[i].Le * gTerm);
+				else contribution = contribution + (BSDF * vplBSDF * VPLs[i].Le * gTerm);
+			}
+		}
+		return contribution;
+	}
+
+	// Handle VPL Direct Lighting by using Halton Sampler (Area Light Only)
+	Colour computeDirectVPL(ShadingData& shadingData, HaltonSampler* sampler) {
+		// If surface is specular we cannot computing direct lighting
+		if (shadingData.bsdf->isPureSpecular() == true) {
+			return Colour(0.0f, 0.0f, 0.0f);
+		}
+		// Compute direct lighting here
+		// Sample a light
+		float pdf, pmf;
+		Colour emission;
+		Light* light = scene->sampleLight(sampler, pmf);
+
+		// Area Light Only
+		if (light->isArea()) {
+			// Sample point on light and store returned emission
+			Vec3 samplePointOnLight = light->sample(shadingData, sampler, emission, pdf);
+			if (pmf <= 0.f) return Colour(0.f, 0.f, 0.f);
+
+			// Calculate Geometry Term
+			Vec3 surfaceToLight = samplePointOnLight - shadingData.x;
+			Vec3 wi = surfaceToLight.normalize();
+			// if (surfaceToLight.lengthSq() < 0.1) return Colour(0.f, 0.f, 0.f);
+			float gTerm = (std::max(Dot(wi, shadingData.sNormal), 0.f) * std::max(-Dot(wi, light->normal(shadingData, wi)), 0.f)) / std::max(surfaceToLight.lengthSq(), EPSILON);
+
+			// Calculate Visibility: V[x(i) <-> x(i+1)] (Binary function, from Ray Tracing)
+			if (scene->visible(shadingData.x, samplePointOnLight)) {
+				// Calculate BSDF
+				Colour BSDF = shadingData.bsdf->evaluate(shadingData, wi);
+
+				// Calculate Weight for MIS (Power Heuristic)
+				float bsdfPDF = shadingData.bsdf->PDF(shadingData, wi);
+				float cosine = std::max(Dot(wi, shadingData.sNormal), EPSILON);
+				float pLight = pdf * pmf;
+				float pBsdf = bsdfPDF * gTerm / cosine;
+				float w = powerHeuristics(pLight, pBsdf, 2);
+
+				// Return the integral
+				if (pdf <= 0) return Colour(0.f, 0.f, 0.f);
+				return emission * BSDF * gTerm * w / pLight;
+			}
+			sampler->reset();
+			return Colour(0.f, 0.f, 0.f);
+		}
+	}
+	
 	void traceVPL(HaltonSampler* sampler) {
-		sampler->hardReset();
 		VPLs.clear();
 		for (unsigned int i = 0; i < MAX_VPLS; i++) {
 			// Sample a light source
@@ -377,7 +431,9 @@ public:
 				// Sample point and direction from on light source
 				float pdfDirection, pdfPosition;
 				Vec3 p = light->samplePositionFromLight(sampler, pdfPosition);
+				sampler->reset();
 				Vec3 wi = light->sampleDirectionFromLight(sampler, pdfDirection);
+				sampler->reset();
 
 				// Evaluate colour from direction
 				Colour col = light->evaluate(-wi) / (pdfPosition * pdfDirection * pmf * MAX_VPLS);
@@ -385,7 +441,6 @@ public:
 				// Create a ray starting at p in direction wi and then call lightTracePath
 				Ray r(p + (wi * EPSILON), wi);
 				traceVPLRecursive(r, pathThroughput, col, sampler, 0);
-				sampler->reset();
 			}
 		}
 	}
@@ -393,9 +448,9 @@ public:
 	void traceVPLRecursive(Ray& r, Colour pathThroughput, Colour Le, HaltonSampler* sampler, int depth, float isSpecular = false) {
 		IntersectionData intersection = scene->traverse(r);
 		ShadingData shadingData = scene->calculateShadingData(intersection, r);
-		if (depth == 0) sampler->hardReset();
 		if (shadingData.t < FLT_MAX) {
 			if (shadingData.bsdf->isLight()) return;
+
 			// Store a VPL
 			VPL vpl(shadingData, pathThroughput * Le);
 			VPLs.emplace_back(vpl);
@@ -420,6 +475,8 @@ public:
 			traceVPLRecursive(indirectRay, pathThroughput, Le, sampler, depth + 1, shadingData.bsdf->isPureSpecular());
 		}
 	}
+
+	// --- Instant Radiosity End ---
 
 	Colour albedo(Ray& r) {
 		IntersectionData intersection = scene->traverse(r);
@@ -695,14 +752,20 @@ public:
 		// Trace and Generate VPLs for Instant Radiosity
 		traceVPL(haltonSamplers);
 
+		// Reset Halton Sampler (for pixel calculations)
+		haltonSamplers->hardReset();
+
 		for (unsigned int y = 0; y < film->height; y++) {
 			for (unsigned int x = 0; x < film->width; x++) {
-				float px = x + haltonSamplers->next();
-				float py = y + haltonSamplers->next();
+				// Using Mersenne Twister on plotting pixels, as Halton Sequence causes either aliasing
+				// or patterns of black pixels caused by Halton Sequence
+				float px = x + samplers->next();
+				float py = y + samplers->next();
 				Ray ray = scene->camera.generateRay(px, py);
 
 				// Check for NaN and Inf Values
-				Colour col = contributeVPL(ray);
+				Colour col = instantRadiosity(ray, haltonSamplers);
+				haltonSamplers->reset();
 				if (std::isnan(col.r) || std::isnan(col.g) || std::isnan(col.b)) col = Colour(0.f, 0.f, 0.f);
 				if (std::isinf(col.r) || std::isinf(col.g) || std::isinf(col.b)) col = Colour(0.f, 0.f, 0.f);
 				film->splat(px, py, col);
@@ -710,7 +773,6 @@ public:
 				unsigned char r, g, b;
 				film->tonemap(x, y, r, g, b, 2.f);
 				canvas->draw(x, y, r, g, b);
-				
 			}
 		}
 	}

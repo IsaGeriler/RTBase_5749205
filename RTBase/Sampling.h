@@ -28,11 +28,12 @@ public:
 };
 
 // Halton Sampler Inspired from "Halton Low-Discrepancy Sequence [Shaders Monthly #12]": https://youtu.be/N6xZvrLusPI
+// First 1000 Prime Numbers Obtained from: https://t5k.org/lists/small/1000.txt
 class HaltonSampler : public Sampler {
 private:
 	// Attributes
-	unsigned int base = 2u;
-	unsigned int index = 1u;
+	int offset = 0;			   // for primes array
+	unsigned int index = 1u;   // for haltonSequence
 
 	// Method
 	// Note: Use quasi random sequences for tracing paths at Instant Radiosity
@@ -47,10 +48,13 @@ private:
 		}
 		return result;
 	}
+
+	// 1000 Prime Numbers Only
+	int safeIncreaseOffset() { return (offset >= 999) ? 0 : offset++; }
 public:
-	float next() { return haltonSequence(base++, index); }  // Increase the base at each function call
-	void reset() { base = 2u; index += 1u; }				// To increase the index, while resetting the base to 2
-	void hardReset() { base = 2u; index = 1u; }				// To fully resetting the index to 1, and the base to 2
+	float next() { return haltonSequence(primes[safeIncreaseOffset()], index); }  // Increase the base at each function call
+	void reset() { offset = 0; index += 1u; }									  // To increase the index, while resetting the base to 2
+	void hardReset() { offset = 0; index = 1u; }								  // To fully resetting the index to 1, and the base to 2
 };
 
 // Note all of these distributions assume z-up coordinate system
@@ -66,7 +70,7 @@ public:
 	static float uniformHemispherePDF(const Vec3 wi) {
 		// Add code here
 		// Solid Angle PDF
-		return 1.f / (2.f * M_PI);
+		return (wi.z <= 0.f) ? 0.f : 1.f / (2.f * M_PI);
 	}
 	
 	static Vec3 cosineSampleHemisphere(float r1, float r2) {
@@ -92,7 +96,7 @@ public:
 	static float uniformSpherePDF(const Vec3& wi) {
 		// Add code here
 		// Solid Angle PDF
-		return 1.f / (4.f * M_PI);
+		return (wi.z <= 0.f) ? 0.f : 1.f / (4.f * M_PI);
 	}
 };
 
