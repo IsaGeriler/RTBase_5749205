@@ -330,11 +330,7 @@ public:
 	}
 
 	// Instant Radiosity
-	// This is almost the same as Light Trace with VPLs...
-	// Concept
-	// – Trace a small number of well distributed paths from the light
-	// – Store information at each intersection: Virtual Point Light (VPL)
-	// – Calculate contribution from each VPL to points visible from the camera
+	// Recheck... probably something is wrong here...
 	std::vector<VPL> VPLs;
 	Colour contributeVPL(Ray& r) {
 		Colour contribution;
@@ -345,29 +341,32 @@ public:
 				return shadingData.bsdf->emit(shadingData, shadingData.wo);
 			}
 			// Handle VPL Contribution
-			for (unsigned int i = 0; i < MAX_VPLS; i++) {
+			for (unsigned int i = 0; i < VPLs.size(); i++) {
 				Vec3 wi = (VPLs[i].shadingData.x - shadingData.x).normalize();
 				Vec3 wiVPL = -wi;
 
 				if (scene->visible(shadingData.x, VPLs[i].shadingData.x)) {
 					// GTerm
-					float gTerm = std::max(Dot(shadingData.sNormal, wi), 0.f) * std::max(Dot(VPLs[i].shadingData.sNormal, wiVPL), 0.f) / (shadingData.x - VPLs[i].shadingData.x).lengthSq();
+					float gTerm = std::max(Dot(shadingData.sNormal, wi), 0.f) * std::max(Dot(VPLs[i].shadingData.sNormal, wiVPL), 0.f) / std::max((VPLs[i].shadingData.x - shadingData.x).lengthSq(), EPSILON);
 
 					// Handle Direct Lighting as usual
 					Colour BSDF = shadingData.bsdf->evaluate(shadingData, wi);
 					Colour vplBSDF = VPLs[i].shadingData.bsdf->evaluate(VPLs[i].shadingData, wiVPL);
-					contribution = contribution + (BSDF * vplBSDF * VPLs[i].Le * gTerm);
+
+					// To avoid light explosions, such as at the kitchen scene
+					if (VPLs[i].shadingData.bsdf->isLight()) contribution = contribution + (vplBSDF * VPLs[i].Le * gTerm);
+					else contribution = contribution + (BSDF * vplBSDF * VPLs[i].Le * gTerm);
 				}
 			}
 			return contribution;
 		}
+		return scene->background->evaluate(r.dir);
 	}
 	
 	void traceVPL(HaltonSampler* sampler) {
 		sampler->hardReset();
 		VPLs.clear();
 		for (unsigned int i = 0; i < MAX_VPLS; i++) {
-			// Handles starting a light path
 			// Sample a light source
 			float pmf;
 			Light* light = scene->sampleWeightedLight(sampler, pmf);
@@ -381,7 +380,7 @@ public:
 				Vec3 wi = light->sampleDirectionFromLight(sampler, pdfDirection);
 
 				// Evaluate colour from direction
-				Colour col = light->evaluate(-wi) / (pdfPosition * pdfDirection * pmf);
+				Colour col = light->evaluate(-wi) / (pdfPosition * pdfDirection * pmf * MAX_VPLS);
 
 				// Create a ray starting at p in direction wi and then call lightTracePath
 				Ray r(p + (wi * EPSILON), wi);
@@ -391,8 +390,7 @@ public:
 		}
 	}
 	
-	void traceVPLRecursive(Ray& r, Colour pathThroughput, Colour Le, HaltonSampler* sampler, int depth) {
-		// Handles tracing the rest of the light path
+	void traceVPLRecursive(Ray& r, Colour pathThroughput, Colour Le, HaltonSampler* sampler, int depth, float isSpecular = false) {
 		IntersectionData intersection = scene->traverse(r);
 		ShadingData shadingData = scene->calculateShadingData(intersection, r);
 		if (depth == 0) sampler->hardReset();
@@ -419,7 +417,7 @@ public:
 				else return;
 			}
 			sampler->reset();
-			traceVPLRecursive(indirectRay, pathThroughput, Le, sampler, depth + 1);
+			traceVPLRecursive(indirectRay, pathThroughput, Le, sampler, depth + 1, shadingData.bsdf->isPureSpecular());
 		}
 	}
 
