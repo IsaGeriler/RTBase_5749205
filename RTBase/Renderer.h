@@ -364,7 +364,7 @@ public:
 
 			if (scene->visible(shadingData.x, VPLs[i].shadingData.x)) {
 				// GTerm
-				float gTerm = std::max(Dot(shadingData.sNormal, wi), 0.f) * std::max(Dot(VPLs[i].shadingData.sNormal, wiVPL), 0.f) / std::max((VPLs[i].shadingData.x - shadingData.x).lengthSq(), EPSILON);
+				float gTerm = std::max(Dot(shadingData.sNormal, wi), EPSILON) * std::max(Dot(VPLs[i].shadingData.sNormal, wiVPL), EPSILON) / std::max((VPLs[i].shadingData.x - shadingData.x).lengthSq(), 1.f);
 
 				// BSDF for VPL Contribution
 				Colour BSDF = shadingData.bsdf->evaluate(shadingData, wi);
@@ -400,8 +400,8 @@ public:
 			Vec3 surfaceToLight = samplePointOnLight - shadingData.x;
 			Vec3 wi = surfaceToLight.normalize();
 			// if (surfaceToLight.lengthSq() < 0.1) return Colour(0.f, 0.f, 0.f);
-			float gTerm = (std::max(Dot(wi, shadingData.sNormal), 0.f) * std::max(-Dot(wi, light->normal(shadingData, wi)), 0.f)) / std::max(surfaceToLight.lengthSq(), EPSILON);
-
+			float gTerm = (std::max(Dot(wi, shadingData.sNormal), EPSILON) * std::max(-Dot(wi, light->normal(shadingData, wi)), EPSILON)) / std::max(surfaceToLight.lengthSq(), 1.f);
+			
 			// Calculate Visibility: V[x(i) <-> x(i+1)] (Binary function, from Ray Tracing)
 			if (scene->visible(shadingData.x, samplePointOnLight)) {
 				// Calculate BSDF
@@ -442,6 +442,7 @@ public:
 
 				// Create a ray starting at p in direction wi and then call lightTracePath
 				Ray r(p + (wi * EPSILON), wi);
+				sampler->reset();
 				traceVPLRecursive(r, pathThroughput, col, sampler, 0);
 			}
 			sampler->reset();
@@ -761,8 +762,8 @@ public:
 
 		for (unsigned int y = 0; y < film->height; y++) {
 			for (unsigned int x = 0; x < film->width; x++) {
-				// Using Mersenne Twister on plotting pixels, as Halton Sequence causes either aliasing
-				// or patterns of black pixels caused by Halton Sequence
+				// Using Mersenne Twister for plotting pixels, as Halton Sequence causes either aliasing
+				// or patterns of black pixels, caused by Halton Sequence
 				float px = x + samplers->next();
 				float py = y + samplers->next();
 				Ray ray = scene->camera.generateRay(px, py);
