@@ -42,7 +42,7 @@ public:
 		float cosThetaI = std::max(std::min(cosTheta, 1.f), -1.f);
 		float eta = iorExt / iorInt;
 		
-		if (cosThetaI <= 0.f) {
+		if (cosThetaI < 0.f) {
 			eta = 1.f / eta;
 			cosThetaI = fabs(cosThetaI);
 		}
@@ -63,7 +63,7 @@ public:
 
 	// Done 100% Sure
 	static Colour fresnelConductor(float cosTheta, Colour ior, Colour k) {
-		float fCosThetaI = std::max(std::min(cosTheta, 1.f), 0.f);
+		float fCosThetaI = std::max(std::min(cosTheta, 1.f), -1.f);
 		float fSinThetaI = sqrtf(std::max(1.f - powf(fCosThetaI, 2), 0.f));
 		Colour cosThetaI(fCosThetaI, fCosThetaI, fCosThetaI);
 		Colour sinThetaI(fSinThetaI, fSinThetaI, fSinThetaI);
@@ -84,7 +84,7 @@ public:
 	static float lambdaGGX(Vec3 wi, float alpha) {
 		// Isotropic Lambda Function for GGX (Trowbridge-Reitz)
 		// Avoid division by zero
-		if (wi.z == 0.f) return 0.f;
+		if (wi.z <= 0.f) return 0.f;
 		float cosTheta = wi.z;
 		float sinTheta = sqrtf(std::max(1.f - powf(cosTheta, 2), 0.f));
 		float tanTheta = std::fabs(sinTheta / cosTheta);
@@ -102,7 +102,11 @@ public:
 	// Done 100% Sure
 	static float Dggx(Vec3 h, float alpha) {
 		// Isotropic Distribution for GGX (Trowbridge-Reitz)
-		return powf(alpha, 2) / (M_PI * powf(powf(h.z, 2) * (powf(alpha, 2) - 1.f) + 1.f, 2));
+		// Avoid division by zero
+		if (h.z <= 0.f) return 0.f;
+		float denom = M_PI * powf(powf(h.z, 2) * (powf(alpha, 2) - 1.f) + 1.f, 2);
+		if (denom <= 0.f) return 0.f;
+		return powf(alpha, 2) / denom;
 	}
 };
 
@@ -256,8 +260,13 @@ public:
 
 		// If alpha < epsilon, treat as a mirror with Conductor Fresnel
 		if (alpha < EPSILON) {
-			pdf = 1.f;
 			Vec3 wi(-wo.x, -wo.y, wo.z);
+			if (wi.z <= 0) {
+				pdf = 0.f;
+				reflectedColour = Colour(0, 0, 0);
+				return Vec3(0, 0, 0);
+			}
+			pdf = 1.f;
 			Colour F = ShadingHelper::fresnelConductor(wi.z, eta, k);
 			reflectedColour = albedo->sample(shadingData.tu, shadingData.tv) * F / wi.z;
 			return shadingData.frame.toWorld(wi);
@@ -273,67 +282,42 @@ public:
 		
 		// Light reflected across microfacet
 		Vec3 wi = -wo + (wm * 2.f * Dot(wm, wo));
+		wi = shadingData.frame.toWorld(wi);
 
-		if (wm.x == 0.f && wm.y == 0.f && wm.z == 0.f) {
-			pdf = 0.f;
-			reflectedColour = Colour(0.f, 0.f, 0.f);
-			return Vec3(0.f, 0.f, 0.f);
-		}
-
-		// Cook-Torrance BRDF
-		// Masking-Shadowing
-		float G = ShadingHelper::Gggx(wi, wo, alpha);
-
-		// Normal Distribution Function
-		float D = ShadingHelper::Dggx(wm, alpha);
-
-		// Fresnel
-		Colour F = ShadingHelper::fresnelConductor(wo.z, eta, k);
-
-		// BRDF
-		float cosThetaO = fabs(wo.z);
-		float cosThetaI = fabs(wi.z);
-		pdf = (D * wm.z) / (4.f * Dot(wo, wm));
-		reflectedColour = (F * G * D) / (4.f * cosThetaO * cosThetaI);
-		return shadingData.frame.toWorld(wi);
+		// Evaluate PDF and BSDF
+		pdf = PDF(shadingData, wi);
+		reflectedColour = evaluate(shadingData, wi);
+		return wi;
 	}
 
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi) {
 		// Convert to local space
-		Vec3 wo = shadingData.frame.toLocal(shadingData.wo);
+		Vec3 woLocal = shadingData.frame.toLocal(shadingData.wo);
 		Vec3 wiLocal = shadingData.frame.toLocal(wi);
 
 		// Can sample only visible normal from wo
-		if (wo.z <= 0.f) {
-			return Colour(0.f, 0.f, 0.f);
-		}
-
+		if (woLocal.z <= 0.f || wiLocal.z <= 0.f) return Colour(0.f, 0.f, 0.f);
+		
 		// If alpha < epsilon, treat as a mirror with Conductor Fresnel
-		if (alpha < EPSILON) {
-			Vec3 wi(-wo.x, -wo.y, wo.z);
-			Colour F = ShadingHelper::fresnelConductor(wi.z, eta, k);
-			return albedo->sample(shadingData.tu, shadingData.tv) * F / wi.z;
-		}
+		if (alpha < EPSILON) return Colour(0.f, 0.f, 0.f);
 
-		Vec3 wm = (wiLocal + wo);
-		if (wm.x == 0.f && wm.y == 0.f && wm.z == 0.f) {
-			return Colour(0.f, 0.f, 0.f);
-		}
-		wm = wm.normalize();
+		Vec3 wm = (wiLocal + woLocal).normalize();
+		if (Dot(woLocal, wm) <= 0.f || Dot(wiLocal, wm) <= 0.f) return Colour(0.f, 0.f, 0.f);
 
 		// Cook-Torrance BRDF
 		// Masking-Shadowing
-		float G = ShadingHelper::Gggx(wiLocal, wo, alpha);
+		float G = ShadingHelper::Gggx(wiLocal, woLocal, alpha);
 
 		// Normal Distribution Function
 		float D = ShadingHelper::Dggx(wm, alpha);
 
 		// Fresnel
-		Colour F = ShadingHelper::fresnelConductor(wo.z, eta, k);
+		Colour F = ShadingHelper::fresnelConductor(Dot(woLocal, wm), eta, k);
 
 		// BRDF
-		float cosThetaO = fabs(wo.z);
+		float cosThetaO = fabs(woLocal.z);
 		float cosThetaI = fabs(wiLocal.z);
+		if (cosThetaO * cosThetaI == 0.f) return Colour(0.f, 0.f, 0.f);
 		return (F * G * D) / (4.f * cosThetaO * cosThetaI);
 	}
 
@@ -343,16 +327,13 @@ public:
 		Vec3 woLocal = shadingData.frame.toLocal(shadingData.wo);
 
 		// Can only sample visible normal from wo
-		if (woLocal.z <= 0.f) return 0.f;
+		if (woLocal.z <= 0.f || wiLocal.z <= 0.f) return 0.f;
 
 		// Treat as a mirror with Conductor Fresnel
 		if (alpha < EPSILON) return 0.f;
-
-		Vec3 wm = (wiLocal + woLocal);
-		if (wm.x == 0.f && wm.y == 0.f && wm.z == 0.f) {
-			return 0.f;
-		}
-		wm = wm.normalize();
+		
+		Vec3 wm = (wiLocal + woLocal).normalize();
+		if (Dot(woLocal, wm) <= 0.f || Dot(wiLocal, wm) <= 0.f) return 0.f;
 
 		float D = ShadingHelper::Dggx(wm, alpha);
 		return (D * wm.z) / (4.f * Dot(woLocal, wm));
@@ -387,6 +368,13 @@ public:
 
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf) {
 		Vec3 woLocal = shadingData.frame.toLocal(shadingData.wo);
+		
+		if (woLocal.z == 0.f) {
+			pdf = 0.f;
+			reflectedColour = Colour(0.f, 0.f, 0.f);
+			return Vec3(0.f, 0.f, 0.f);
+		}
+
 		float cosThetaI = woLocal.z;
 		float fresnel = ShadingHelper::fresnelDielectric(cosThetaI, intIOR, extIOR);
 		float IOR = (cosThetaI > 0.f) ? (extIOR / intIOR) : (intIOR / extIOR);
@@ -522,6 +510,7 @@ public:
 
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi) {
 		// Replace this with Dielectric evaluation code
+		Vec3 wiLocal = shadingData.frame.toLocal(wi);
 		return albedo->sample(shadingData.tu, shadingData.tv) / M_PI;
 	}
 
@@ -610,7 +599,8 @@ public:
 	}
 };
 
-// Done PhongBSDF, 90% Sure
+// Done 100% Sure
+// PhongBSDF is implemented, although Blinn or LaFortune would be a better option
 class PlasticBSDF : public BSDF {
 public:
 	Texture* albedo;
@@ -722,6 +712,7 @@ public:
 	}
 };
 
+// Done 100% Sure
 // Refraction has been selected, and used Beer's Law for LayeredBSDF
 // car2 scene can be opened to view the LayeredBSDF effects
 class LayeredBSDF : public BSDF {
