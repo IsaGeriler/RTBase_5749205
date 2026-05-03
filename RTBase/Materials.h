@@ -428,7 +428,7 @@ public:
 	}
 };
 
-// Implement if time left...
+// I haven't seen much scenes with DielectricBSDF, so I am skipping this implementation due limited time
 class DielectricBSDF : public BSDF {
 public:
 	Texture* albedo;
@@ -443,57 +443,6 @@ public:
 		extIOR = _extIOR;
 		alpha = 1.62142f * sqrtf(roughness);
 	}
-
-	//Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf) {
-	//	// Replace this with Dielectric sampling code
-	//	Vec3 woLocal = shadingData.frame.toLocal(shadingData.wo);
-	//	float cosThetaI = woLocal.z;
-	//	float fresnel = ShadingHelper::fresnelDielectric(cosThetaI, intIOR, extIOR);
-	//	float IOR = (cosThetaI > 0.f) ? (extIOR / intIOR) : (intIOR / extIOR);
-	//	if (cosThetaI <= 0.f) cosThetaI = fabs(cosThetaI);
-
-	//	// Sampling an isotropic GGX
-	//	float r1 = sampler->next();
-	//	float r2 = sampler->next();
-
-	//	float thetaM = acosf(sqrtf(((1.f - r1) / (r1 * (powf(alpha, 2) - 1.f) + 1.f))));
-	//	float phiM = 2.f * M_PI * r2;
-	//	Vec3 wm = SphericalCoordinates::sphericalToWorld(thetaM, phiM);
-	//	Vec3 wi;
-	//	float pdfReflect, pdfRefract;
-
-	//	if (sampler->next() < fresnel) {
-	//		// Reflection
-	//		// Light reflected across microfacet
-	//		Vec3 wi = -woLocal + (wm * 2 * Dot(wm, woLocal));
-
-	//		// Cook-Torrance BRDF
-	//		// Masking-Shadowing
-	//		float G = ShadingHelper::Gggx(wi, woLocal, alpha);
-
-	//		// Normal Distribution Function
-	//		float D = ShadingHelper::Dggx(wm, alpha);
-
-	//		// Fresnel
-	//		float F = fresnel;
-
-	//		// BRDF
-	//		float cosThetaO = fabs(woLocal.z);
-	//		float cosThetaI = fabs(wi.z);
-	//		float BRDF = (F * G * D) / (4.f * cosThetaO * cosThetaI);
-	//		pdfReflect = (D * wm.z) / (4.f * Dot(woLocal, wm));
-	//		reflectedColour = Colour(BRDF, BRDF, BRDF);
-	//		return shadingData.frame.toWorld(wi);
-	//	} else {
-	//		// Refraction
-	//		if (1.f > 1.f) {
-	//			// Total Internal Reflection
-	//		} else {
-	//		
-	//		}
-	//	}
-	//	return shadingData.frame.toWorld(wi);
-	//}
 
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf) {
 		// Replace this with Dielectric sampling code
