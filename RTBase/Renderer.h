@@ -221,20 +221,24 @@ public:
 		float x, y;
 		// Check if p is on camera
 		if (scene->camera.projectOntoCamera(p, x, y)) {
-			// Compute geometry term between p and camera
-			Vec3 cNormal = scene->camera.viewDirection;  // Camera normal
-			Vec3 cPos = scene->camera.origin;			 // Camera position
-			Vec3 cDirection = cPos - p;					 // Direction to camera
+			Vec3 cameraNormal = scene->camera.viewDirection;  // Camera normal
+			Vec3 cameraPos = scene->camera.origin;			  // Camera position
+			Vec3 cameraDirection = cameraPos - p;			  // Direction to camera
 
 			// Visibility Check
-			if (scene->visible(p, cPos)) {
-				Vec3 wi = cDirection.normalize();
-				if (cDirection.lengthSq() < EPSILON) return;
+			if (scene->visible(p, cameraPos)) {
+				Vec3 wi = cameraDirection.normalize();
+				if (cameraDirection.lengthSq() < EPSILON) return;
+
+				// Theta is angle between scene->camera.viewDirection and direction to camera
+				float cosTheta = -Dot(cameraNormal, wi);
+				float cosThetaPrime = Dot(n, wi);
+				if (cosTheta <= 0.f || cosThetaPrime <= 0.f) return;
+
+				// Compute geometry term between p and camera
+				float gTerm = cosTheta * cosThetaPrime / cameraDirection.lengthSq();
 
 				// Need to compute We(x,w) = 1.f / (Afilm * cos4Theta)
-				// Theta is angle between scene->camera.viewDirection and direction to camera
-				float cosTheta = std::max(-Dot(cNormal, wi), EPSILON);
-				float gTerm = cosTheta * std::max(Dot(n, wi), EPSILON) / std::max(cDirection.lengthSq(), EPSILON);
 				float Afilm = scene->camera.Afilm;
 				float W = 1.f / (Afilm * powf(cosTheta, 4));
 
@@ -250,7 +254,6 @@ public:
 		float pmf;
 		Light* light = scene->sampleWeightedLight(sampler, pmf);
 		if (pmf <= 0.f) return;
-		Colour pathThroughput(1.f, 1.f, 1.f);
 
 		// Area Light
 		if (light->isArea()) {
@@ -258,42 +261,22 @@ public:
 			float pdfDirection, pdfPosition;
 			Vec3 p = light->samplePositionFromLight(sampler, pdfPosition);
 			Vec3 wi = light->sampleDirectionFromLight(sampler, pdfDirection);
-			if (pdfPosition <= 0.f) return;
+			if (pdfPosition <= 0.f || pdfDirection <= 0.f) return;
 
 			// Light Normal
-			Vec3 n = light->normal(ShadingData(), p);
+			Vec3 n = light->normal(ShadingData(), wi);
 			
 			// Connect position to camera
-			Colour col = light->evaluate(-wi) / (pdfPosition * pmf);
+			// Le because we have to pass that to the recursive function
+			Colour Le = light->evaluate(-wi);
+			Colour col = Le / pdfPosition;
 			connectToCamera(p, n, col);
 			
 			// Create a ray starting at p in direction wi and then call lightTracePath
 			Ray r(p + (wi * EPSILON), wi);
-			lightTracePath(r, pathThroughput, col, sampler, 0);
+			lightTracePath(r, col, Le, sampler, 0);
 		}
-		// Environment Map
-		else {
-			// Need to flip direction to trace into scene (done inside the function already)
-			float pdfBounds, pdfDirection;
-			Vec3 wi = light->sampleDirectionFromLight(sampler, pdfDirection);
-			
-			// Sample position on the scene
-			Vec3 sampledPos = light->samplePositionFromLight(sampler, pdfBounds);
-
-			// Light Normal
-			Vec3 n = light->normal(ShadingData(), sampledPos);
-			
-			// Overall PDF is product of Direction PDF and Position on bounds PDF
-			float pdf = pdfBounds + pdfDirection;
-
-			// Connect position to camera
-			Colour col = light->evaluate(-wi) / pdf * pmf;
-			connectToCamera(sampledPos, n, col);
-			
-			// Create a ray starting at p in direction wi and then call lightTracePath
-			Ray r(sampledPos + (wi * EPSILON), wi);
-			lightTracePath(r, pathThroughput, col, sampler, 0);
-		}
+		// Scrape Environment Map for now...
 	}
 
 	void lightTracePath(Ray& r, Colour pathThroughput, Colour Le, Sampler* sampler, int depth) {
@@ -310,7 +293,8 @@ public:
 
 			// col has value of pathThroughput * shadingData.bsdf->evaluate(shadingData , wi) * Le
 			Colour col = pathThroughput * shadingData.bsdf->evaluate(shadingData, dirToCamera) * Le;
-			
+			connectToCamera(shadingData.x, shadingData.sNormal, col);
+
 			// Apply Russian Roulette
 			if (depth >= 3) {
 				float rrp = std::min(pathThroughput.Lum(), 0.95f);
@@ -322,18 +306,15 @@ public:
 			float pdf;
 			Colour indirect;
 			Vec3 wi = shadingData.bsdf->sample(shadingData, sampler, indirect, pdf);
+
+			if (pdf <= 0.f) return;
 			Ray indirectRay(shadingData.x + (wi * EPSILON), wi);
 
 			// Update path throughput (multiply with IndirectBSDF and cosine, divide by pdf)
-			float cosine = std::max(Dot(wi, shadingData.sNormal), EPSILON);
+			float cosine = Dot(wi, shadingData.sNormal);
 			pathThroughput = pathThroughput * indirect * cosine / pdf;
-
-			float corrFactor1 = fabs(Dot(shadingData.wo, shadingData.sNormal)) / fabs(Dot(shadingData.wo, shadingData.gNormal));
-			float corrFactor2 = fabs(Dot(dirToCamera, shadingData.gNormal)) / fabs(Dot(dirToCamera, shadingData.sNormal));
-			float correction = corrFactor1 * corrFactor2;
 			
 			// Connect each intersection to camera
-			if (!shadingData.bsdf->isPureSpecular()) connectToCamera(shadingData.x, shadingData.sNormal, pathThroughput * col * correction);
 			lightTracePath(indirectRay, pathThroughput, Le, sampler, depth + 1);
 		}
 	}
@@ -567,7 +548,7 @@ public:
 
 	void render() {
 		// General Render Function to Select Desired Rendering Method
-		int renderMode = 3;
+		int renderMode = 1;
 		if (renderMode == 0) renderSequential();
 		if (renderMode == 1) renderMultithread();
 		if (renderMode == 2) renderMultithreadDenoise();

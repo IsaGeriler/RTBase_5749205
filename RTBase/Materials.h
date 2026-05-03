@@ -272,7 +272,7 @@ public:
 		Vec3 wm = SphericalCoordinates::sphericalToWorld(thetaM, phiM);
 		
 		// Light reflected across microfacet
-		Vec3 wi = -wo + (wm * 2 * Dot(wm, wo));
+		Vec3 wi = -wo + (wm * 2.f * Dot(wm, wo));
 
 		if (wm.x == 0.f && wm.y == 0.f && wm.z == 0.f) {
 			pdf = 0.f;
@@ -722,8 +722,8 @@ public:
 	}
 };
 
-// Implement if time left...
-// Use Beer's Law
+// Refraction has been selected, and used Beer's Law for LayeredBSDF
+// car2 scene can be opened to view the LayeredBSDF effects
 class LayeredBSDF : public BSDF {
 public:
 	BSDF* base;
@@ -743,12 +743,67 @@ public:
 
 	Vec3 sample(const ShadingData& shadingData, Sampler* sampler, Colour& reflectedColour, float& pdf) {
 		// Add code to include layered sampling
-		return base->sample(shadingData, sampler, reflectedColour, pdf);
+		Vec3 wo = shadingData.frame.toLocal(shadingData.wo);
+		Vec3 wi = shadingData.frame.toLocal(base->sample(shadingData, sampler, reflectedColour, pdf));
+
+		if (pdf <= 0.f || wi.z == 0.f || wo.z == 0.f) {
+			pdf = 0.f;
+			reflectedColour = Colour(0, 0, 0);
+			return Vec3(0.f, 0.f, 0.f);
+		}
+		
+		// Handle absorbing medium
+		// Since on local space, Dot(w, n) becomes w.z
+		float distWo = thickness / fabs(wo.z);
+		float distWi = thickness / fabs(wi.z);
+
+		// From Beer's Law
+		Colour TrWo(powf(M_E, -distWo * sigmaa.r), powf(M_E, -distWo * sigmaa.g), powf(M_E, -distWo * sigmaa.b));
+		Colour TrWi(powf(M_E, -distWi * sigmaa.r), powf(M_E, -distWi * sigmaa.g), powf(M_E, -distWi * sigmaa.b));
+
+		// Evaluate Fresnel
+		float fresnelWo = ShadingHelper::fresnelDielectric(wo.z, intIOR, extIOR);
+		float fresnelWi = ShadingHelper::fresnelDielectric(wi.z, intIOR, extIOR);
+
+		float etaWo = (wo.z > 0.f) ? (extIOR / intIOR) : (intIOR / extIOR);
+		float etaWi = (wi.z > 0.f) ? (extIOR / intIOR) : (intIOR / extIOR);
+
+		// Refract
+		float refractWo = 1.f - fresnelWo;
+		float refractWi = 1.f - fresnelWi;
+
+		reflectedColour = reflectedColour * ((TrWo * etaWo * refractWo) + (TrWi * etaWi * refractWi));
+		return wi;
 	}
 
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi) {
 		// Add code for evaluation of layer
-		return base->evaluate(shadingData, wi);
+		Vec3 wo = shadingData.frame.toLocal(shadingData.wo);
+		Vec3 wiLocal = shadingData.frame.toLocal(wi);
+
+		if (wiLocal.z == 0.f || wo.z == 0.f) return Colour(0.f, 0.f, 0.f);
+		
+		// Handle absorbing medium
+		// Since on local space, Dot(w, n) becomes w.z
+		float distWo = thickness / fabs(wo.z);
+		float distWi = thickness / fabs(wiLocal.z);
+
+		// From Beer's Law
+		Colour TrWo(powf(M_E, -distWo * sigmaa.r), powf(M_E, -distWo * sigmaa.g), powf(M_E, -distWo * sigmaa.b));
+		Colour TrWi(powf(M_E, -distWi * sigmaa.r), powf(M_E, -distWi * sigmaa.g), powf(M_E, -distWi * sigmaa.b));
+
+		// Evaluate Fresnel
+		float fresnelWo = ShadingHelper::fresnelDielectric(wo.z, intIOR, extIOR);
+		float fresnelWi = ShadingHelper::fresnelDielectric(wiLocal.z, intIOR, extIOR);
+
+		float etaWo = (wo.z > 0.f) ? (extIOR / intIOR) : (intIOR / extIOR);
+		float etaWi = (wiLocal.z > 0.f) ? (extIOR / intIOR) : (intIOR / extIOR);
+
+		// Refraction
+		float refractWo = 1.f - fresnelWo;
+		float refractWi = 1.f - fresnelWi;
+
+		return base->evaluate(shadingData, shadingData.frame.toWorld(wiLocal)) * ((TrWo * etaWo * refractWo) + (TrWi * etaWi * refractWi));
 	}
 
 	float PDF(const ShadingData& shadingData, const Vec3& wi) {

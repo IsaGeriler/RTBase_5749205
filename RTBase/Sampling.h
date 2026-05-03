@@ -70,7 +70,7 @@ public:
 	static float uniformHemispherePDF(const Vec3 wi) {
 		// Add code here
 		// Solid Angle PDF
-		return (wi.z <= 0.f) ? 0.f : 1.f / (2.f * M_PI);
+		return 1.f / (2.f * M_PI);
 	}
 	
 	static Vec3 cosineSampleHemisphere(float r1, float r2) {
@@ -83,7 +83,7 @@ public:
 	static float cosineHemispherePDF(const Vec3 wi) {
 		// Add code here
 		float theta = SphericalCoordinates::sphericalTheta(wi);
-		return (cos(theta) <= 0.f) ? 0.f : (cos(theta) * M_1_PI);
+		return (cos(theta) < 0.f) ? 0.f : (cos(theta) * M_1_PI);
 	}
 
 	static Vec3 uniformSampleSphere(float r1, float r2) {
@@ -96,7 +96,7 @@ public:
 	static float uniformSpherePDF(const Vec3& wi) {
 		// Add code here
 		// Solid Angle PDF
-		return (wi.z <= 0.f) ? 0.f : 1.f / (4.f * M_PI);
+		return 1.f / (4.f * M_PI);
 	}
 };
 
