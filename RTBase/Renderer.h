@@ -215,7 +215,6 @@ public:
 	}
 
 	// --- Light Trace Start ---
-	// Recheck... probably something is wrong here as only Cornell Box works properly
 	void connectToCamera(Vec3 p, Vec3 n, Colour col) {
 		// Handle connections to camera
 		float x, y;
@@ -242,8 +241,13 @@ public:
 				float Afilm = scene->camera.Afilm;
 				float W = 1.f / (Afilm * powf(cosTheta, 4));
 
+				// Clamp contribution due to mitigating blocky whites/artifacts
+				Colour contribution = col * gTerm * W;
+				contribution.r = std::min(contribution.r, 10.f);
+				contribution.g = std::min(contribution.g, 10.f);
+				contribution.b = std::min(contribution.b, 10.f);
 				// Splat col onto film at coordinates from projectOntoCamera
-				film->splat(x, y, col * gTerm * W);
+				film->splat(x, y, contribution);
 			}
 		}
 	}
@@ -254,6 +258,7 @@ public:
 		float pmf;
 		Light* light = scene->sampleWeightedLight(sampler, pmf);
 		if (pmf <= 0.f) return;
+		Colour pathThroughput(1.f, 1.f, 1.f);
 
 		// Area Light
 		if (light->isArea()) {
@@ -274,9 +279,9 @@ public:
 			
 			// Create a ray starting at p in direction wi and then call lightTracePath
 			Ray r(p + (wi * EPSILON), wi);
-			lightTracePath(r, col, Le, sampler, 0);
+			lightTracePath(r, pathThroughput, Le, sampler, 0);
 		}
-		// Scrape Environment Map for now...
+		// Scraped Environment Map due time constraints
 	}
 
 	void lightTracePath(Ray& r, Colour pathThroughput, Colour Le, Sampler* sampler, int depth) {
@@ -293,7 +298,7 @@ public:
 
 			// col has value of pathThroughput * shadingData.bsdf->evaluate(shadingData , wi) * Le
 			Colour col = pathThroughput * shadingData.bsdf->evaluate(shadingData, dirToCamera) * Le;
-			connectToCamera(shadingData.x, shadingData.sNormal, col);
+			if (!shadingData.bsdf->isPureSpecular()) connectToCamera(shadingData.x, shadingData.sNormal, col);
 
 			// Apply Russian Roulette
 			if (depth >= 3) {
@@ -310,9 +315,16 @@ public:
 			if (pdf <= 0.f) return;
 			Ray indirectRay(shadingData.x + (wi * EPSILON), wi);
 
+			// Correction factor
+			float correction;
+			if (fabs(Dot(dirToCamera, shadingData.sNormal)) == 0 || fabs(Dot(shadingData.wo, shadingData.gNormal)) == 0) correction = 0.f;
+			else correction = (fabs(Dot(shadingData.wo, shadingData.sNormal)) / fabs(Dot(shadingData.wo, shadingData.gNormal))) *
+							  (fabs(Dot(dirToCamera, shadingData.gNormal)) / fabs(Dot(dirToCamera, shadingData.sNormal)));
+
 			// Update path throughput (multiply with IndirectBSDF and cosine, divide by pdf)
 			float cosine = Dot(wi, shadingData.sNormal);
-			pathThroughput = pathThroughput * indirect * cosine / pdf;
+			if (shadingData.bsdf->isPureSpecular()) pathThroughput = pathThroughput * indirect * correction;
+			else pathThroughput = pathThroughput * indirect * cosine * correction / pdf;
 			
 			// Connect each intersection to camera
 			lightTracePath(indirectRay, pathThroughput, Le, sampler, depth + 1);
@@ -406,6 +418,7 @@ public:
 			}
 			return Colour(0.f, 0.f, 0.f);
 		}
+		// Scraped Environment Map due time constraints
 	}
 	
 	void traceVPL(HaltonSampler* sampler) {
@@ -548,7 +561,7 @@ public:
 
 	void render() {
 		// General Render Function to Select Desired Rendering Method
-		int renderMode = 1;
+		int renderMode = 3;
 		if (renderMode == 0) renderSequential();
 		if (renderMode == 1) renderMultithread();
 		if (renderMode == 2) renderMultithreadDenoise();
