@@ -50,7 +50,7 @@ private:
 	}
 
 	// 1000 Prime Numbers Only
-	int safeIncreaseOffset() { return (offset >= 999) ? 0 : offset++; }
+	int safeIncreaseOffset() { return (offset++ % 1000); }
 public:
 	float next() { return haltonSequence(primes[safeIncreaseOffset()], index); }  // Increase the base at each function call
 	void reset() { offset = 0; index += 1u; }									  // To increase the index, while resetting the base to 2

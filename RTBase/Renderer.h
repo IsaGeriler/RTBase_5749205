@@ -124,7 +124,7 @@ public:
 				float w = powerHeuristics(pLight, pBsdf, 2);
 
 				// Return the integral
-				if (pdf <= 0) return Colour(0.f, 0.f, 0.f);
+				if (pLight <= 0) return Colour(0.f, 0.f, 0.f);
 				return emission * BSDF * gTerm * w / pLight;
 			}
 			return Colour(0.f, 0.f, 0.f);
@@ -152,7 +152,7 @@ public:
 				float w = powerHeuristics(pLight, pBsdf, 2);
 				
 				// Return the integral
-				if (pdf <= 0) return Colour(0.f, 0.f, 0.f);
+				if (pLight <= 0) return Colour(0.f, 0.f, 0.f);
 				return emission * BSDF * gTerm * w / pLight;
 			}
 			return Colour(0.f, 0.f, 0.f);
@@ -177,7 +177,7 @@ public:
 		return pathTraceRecursive(r, pathThroughput, 0, sampler);
 	}
 	
-	Colour pathTraceRecursive(Ray& r, Colour& pathThroughput, int depth, Sampler* sampler, float isSpecular = false) {
+	Colour pathTraceRecursive(Ray& r, Colour& pathThroughput, int depth, Sampler* sampler, bool isSpecular = false) {
 		// Add pathtracer code here
 		// Trace Ray
 		IntersectionData intersection = scene->traverse(r);
@@ -234,7 +234,7 @@ public:
 				// Need to compute We(x,w) = 1.f / (Afilm * cos4Theta)
 				// Theta is angle between scene->camera.viewDirection and direction to camera
 				float cosTheta = std::max(-Dot(cNormal, wi), EPSILON);
-				float gTerm = cosTheta * std::max(Dot(n, wi), EPSILON) / cDirection.lengthSq();
+				float gTerm = cosTheta * std::max(Dot(n, wi), EPSILON) / std::max(cDirection.lengthSq(), EPSILON);
 				float Afilm = scene->camera.Afilm;
 				float W = 1.f / (Afilm * powf(cosTheta, 4));
 
@@ -249,6 +249,7 @@ public:
 		// Sample a light source
 		float pmf;
 		Light* light = scene->sampleWeightedLight(sampler, pmf);
+		if (pmf <= 0.f) return;
 		Colour pathThroughput(1.f, 1.f, 1.f);
 
 		// Area Light
@@ -257,12 +258,13 @@ public:
 			float pdfDirection, pdfPosition;
 			Vec3 p = light->samplePositionFromLight(sampler, pdfPosition);
 			Vec3 wi = light->sampleDirectionFromLight(sampler, pdfDirection);
+			if (pdfPosition <= 0.f) return;
 
 			// Light Normal
 			Vec3 n = light->normal(ShadingData(), p);
 			
 			// Connect position to camera
-			Colour col = light->evaluate(-wi) / pdfPosition * pmf;
+			Colour col = light->evaluate(-wi) / (pdfPosition * pmf);
 			connectToCamera(p, n, col);
 			
 			// Create a ray starting at p in direction wi and then call lightTracePath
@@ -300,15 +302,14 @@ public:
 		ShadingData shadingData = scene->calculateShadingData(intersection, r);
 		if (shadingData.t < FLT_MAX) {
 			if (shadingData.bsdf->isLight()) return;
+			if (depth >= 10) return;
+
 			// Use direction to camera (need to normalize)
 			Vec3 dirToCamera = scene->camera.origin - shadingData.x;
 			dirToCamera.normalize();
 
 			// col has value of pathThroughput * shadingData.bsdf->evaluate(shadingData , wi) * Le
 			Colour col = pathThroughput * shadingData.bsdf->evaluate(shadingData, dirToCamera) * Le;
-			
-			// Connect each intersection to camera
-			connectToCamera(shadingData.x, dirToCamera, col);
 			
 			// Apply Russian Roulette
 			if (depth >= 3) {
@@ -326,6 +327,13 @@ public:
 			// Update path throughput (multiply with IndirectBSDF and cosine, divide by pdf)
 			float cosine = std::max(Dot(wi, shadingData.sNormal), EPSILON);
 			pathThroughput = pathThroughput * indirect * cosine / pdf;
+
+			float corrFactor1 = fabs(Dot(shadingData.wo, shadingData.sNormal)) / fabs(Dot(shadingData.wo, shadingData.gNormal));
+			float corrFactor2 = fabs(Dot(dirToCamera, shadingData.gNormal)) / fabs(Dot(dirToCamera, shadingData.sNormal));
+			float correction = corrFactor1 * corrFactor2;
+			
+			// Connect each intersection to camera
+			if (!shadingData.bsdf->isPureSpecular()) connectToCamera(shadingData.x, shadingData.sNormal, pathThroughput * col * correction);
 			lightTracePath(indirectRay, pathThroughput, Le, sampler, depth + 1);
 		}
 	}
@@ -446,7 +454,7 @@ public:
 		}
 	}
 	
-	void traceVPLRecursive(Ray& r, Colour pathThroughput, Colour Le, HaltonSampler* sampler, int depth, float isSpecular = false) {
+	void traceVPLRecursive(Ray& r, Colour pathThroughput, Colour Le, HaltonSampler* sampler, int depth, bool isSpecular = false) {
 		IntersectionData intersection = scene->traverse(r);
 		ShadingData shadingData = scene->calculateShadingData(intersection, r);
 		if (shadingData.t < FLT_MAX) {
@@ -559,7 +567,7 @@ public:
 
 	void render() {
 		// General Render Function to Select Desired Rendering Method
-		int renderMode = 5;
+		int renderMode = 3;
 		if (renderMode == 0) renderSequential();
 		if (renderMode == 1) renderMultithread();
 		if (renderMode == 2) renderMultithreadDenoise();
