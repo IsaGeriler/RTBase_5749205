@@ -318,7 +318,7 @@ public:
 		float cosThetaO = fabs(woLocal.z);
 		float cosThetaI = fabs(wiLocal.z);
 		if (cosThetaO * cosThetaI == 0.f) return Colour(0.f, 0.f, 0.f);
-		return (F * G * D) / (4.f * cosThetaO * cosThetaI);
+		return albedo->sample(shadingData.tu, shadingData.tv) * (F * G * D) / (4.f * cosThetaO * cosThetaI);
 	}
 
 	float PDF(const ShadingData& shadingData, const Vec3& wi) {

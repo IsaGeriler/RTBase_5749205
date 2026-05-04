@@ -16,9 +16,18 @@ int main(int argc, char* argv[]) {
 	// runTests()
 
 	// Initialize default parameters
-	std::string sceneName = "Scenes/dining-room";
+	//std::string sceneName = "Scenes/bathroom";
+	//std::string sceneName = "Scenes/car2";
+	//std::string sceneName = "Scenes/classroom";
+	//std::string sceneName = "Scenes/cornell-box";
+	//std::string sceneName = "Scenes/glass-of-water";
+	//std::string sceneName = "Scenes/kitchen";
+	//std::string sceneName = "Scenes/MaterialsScene";
+	std::string sceneName = "Scenes/Sibenik";
 	std::string filename = "GI.hdr";
 	unsigned int SPP = 8192;
+	//unsigned int SPP = 128;
+	//unsigned int SPP = 16;
 
 	if (argc > 1) {
 		std::unordered_map<std::string, std::string> args;
