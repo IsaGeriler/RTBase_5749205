@@ -1,6 +1,6 @@
 # RTBase
 
-![Showcase Render](images/GlassOfWater128SPP.png)
+![Showcase Render](Images/GlassOfWater128SPP.png)
 *Glass of Water scene rendered at 128 SPP, demonstrating Glass BSDF and Throwbridge-Reitz (GGX) Conductor BSDF implementations.*
 
 ## Overview
@@ -51,7 +51,7 @@ Evaluating identical Cornell Box scenes across the three implemented light trans
 
 | Path Tracing | Light Tracing | Instant Radiosity |
 |:---:|:---:|:---:|
-| ![Cornell Box PT](images/CornellBoxPT.png) | ![Cornell Box LT](images/CornellBoxLT.png) | ![Cornell Box IR](images/CornellBoxIR.png) |
+| ![Cornell Box PT](Images/CornellBoxPT.png) | ![Cornell Box LT](Images/CornellBoxLT.png) | ![Cornell Box IR](Images/CornellBoxIR.png) |
 | *Standard path tracing.* | *Paths traced from light sources.* | *Halton-sampled Virtual Point Lights.* |
 
 ### Variance Reduction via AI Denoising (Intel OIDN)
@@ -59,19 +59,19 @@ Comparing raw outputs at 128 Samples Per Pixel (SPP) against 16 SPP outputs proc
 
 | 128 SPP (Raw / Noisy) | 16 SPP (Denoised via OIDN) |
 |:---:|:---:|
-| ![Bathroom 128SPP](images/Bathroom128SPP.png) | ![Bathroom 16SPP Denoised](images/Bathroom16SPPDenoised.png) |
-| ![Kitchen 128SPP](images/Kitchen128SPP.png) | ![Kitchen 16SPP Denoised](images/Kitchen16SPPDenoised.png) |
-| ![Classroom 128SPP](images/Classroom128SPP.png) | ![Classroom 16SPP Denoised](images/Classroom16SPPDenoised.png) |
-| ![Sibenik 128SPP](images/Sibenik128SPP.png) | ![Sibenik 16SPP Denoised](images/Sibenik16SPPDenoised.png) |
+| ![Bathroom 128SPP](Images/Bathroom128SPP.png) | ![Bathroom 16SPP Denoised](Images/Bathroom16SPPDenoised.png) |
+| ![Kitchen 128SPP](Images/Kitchen128SPP.png) | ![Kitchen 16SPP Denoised](Images/Kitchen16SPPDenoised.png) |
+| ![Classroom 128SPP](Images/Classroom128SPP.png) | ![Classroom 16SPP Denoised](Images/Classroom16SPPDenoised.png) |
+| ![Sibenik 128SPP](Images/Sibenik128SPP.png) | ![Sibenik 16SPP Denoised](Images/Sibenik16SPPDenoised.png) |
 
 *(Note: Classroom and Sibenik scenes also evaluate Latitude-Longitude Environment Map lighting).*
 
 ### Material Implementations
 
 **Layered BSDF Evaluation**
-![Car Scene](images/Car128SPP.png)
+![Car Scene](Images/Car128SPP.png)
 *Car model rendered at 128 SPP testing the Layered BSDF implementation.*
 
 **BSDF Lineup & Environment Map**
-![Materials Scene](images/MaterialsScene128SPP.png)
+![Materials Scene](Images/MaterialsScene128SPP.png)
 *Left to right: Demonstrating various implemented BSDFs (Oren-Nayar, Conductor, Plastic, Mirror, Glass) under an environment map sampled using a luminance-based PDF.*
