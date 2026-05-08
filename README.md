@@ -1,81 +1,77 @@
 # RTBase
 
-## Current Image of Cornell Box (Path Trace)
-
-Materials: DiffuseBSDF
-
-Lighting: Area Light
-
-<img alt="CornellBox" src="Images/PathTraceCornellBox.png" />
-
-## Current Image of Cornell Box (Light Trace)
-
-Materials: DiffuseBSDF
-
-Lighting: Area Light
-
-<img alt="CornellBox" src="Images/LightTraceCornellBox.png" />
-
-## Current Image of Cornell Box (Instant Radiosity)
-
-Materials: DiffuseBSDF
-
-Lighting: Area Light
-
-Sampler Used: Halton Sampler (from Halton Sequence)
-
-<img alt="CornellBox" src="Images/InstantRadiosityCornellBox.png" />
-
-## Current Image of Glass of Water
-
-Materials: ConductorBSDF, DiffuseBSDF, GlassBSDF
-
-Lighting: Area Light
-
-<img alt="GlassOfWater" src="Images/GlassOfWater.png"/>
-
-## Current Image of Materials Scene
-
-Materials: ConductorBSDF, DiffuseBSDF, GlassBSDF, MirrorBSDF, OrenNayarBSDF, PlasticBSDF
-
-Lighting: Environment Lighting
-
-<img alt="GlassOfWater" src="Images/MaterialsSceneEnvMap.png"/>
+![Showcase Render](images/GlassOfWater128SPP.png)
+*Glass of Water scene rendered at 128 SPP, demonstrating Glass BSDF and Throwbridge-Reitz (GGX) Conductor BSDF implementations.*
 
 ## Overview
-
-This project provides a foundational ray tracing renderer for students studying Advanced Computer Graphics. The codebase is structured to facilitate learning by including sections where students need to complete missing implementations.
+An extended CPU-based multithreaded, Physically Based Renderer written in C++, built to explore light transport and material models. The core architecture supports standard Path Tracing, alongside Instant Radiosity and Light Tracing rendering algorithms. The material framework handles GGX Microfacets (sampled proportionally to the NDF), Oren-Nayar, Plastic (Phong Model), Diffuse, Mirror, Glass, and Layered BSDFs (featuring Beer's Law). Render times and variance are managed via Bounding Volume Hierarchy with Binned Surface Area Heuristics, tile-based rendering, Multiple Importance Sampling, and custom AOVs (Arbitrary Output Variables) to support Intel OIDN for denoising.
 
 ## Project Structure
 
 ```
 Renderer/
-│── Core.h               # Core mathematical and utility functions
-│── Renderer.h           # Main ray tracing logic
-│── Sampling.h           # Monte Carlo sampling utilities
-│── Scene.h              # Scene representation and camera logic
-│── SceneLoader.h        # Loads scenes and configurations
-│── Lights.h             # Light source definitions
-│── Geometry.h           # Geometric structures and operations
-│── Imaging.h            # Image generation and storage
-│── Materials.h          # Materials and shading models
-│── GEMLoader.h          # External loader for scene assets
+│── Core.h                  # Core mathematical and utility functions
+│── Renderer.h              # Main ray tracing logic
+│── Sampling.h              # Monte Carlo sampling utilities
+│── Scene.h                 # Scene representation and camera logic
+│── SceneLoader.h           # Loads scenes and configurations
+│── Lights.h                # Light source definitions
+│── Geometry.h              # Geometric structures and operations
+│── Imaging.h               # Image generation and storage
+│── Materials.h             # Materials and shading models
+│── GEMLoader.h             # External loader for scene assets
 │── GamesEngineeringBase.h  # Base utilities for integration
 ```
 
-## Scenes
+## Features & Implementation Details
 
-Scenes can be found on the Moodle page. Please download them and place them in the working directory.
+### Light Transport & Sampling
+* **Path Tracing:** Standard unidirectional integrator with Multiple Importance Sampling.
+* **Instant Radiosity:** Computes indirect illumination via Virtual Point Lights, utilizing a **quasi-Monte Carlo sequence with Halton Sampling**, relying on prime bases for the Radical Inverse (van Der Corput Sequence).
+* **Light Tracing:** Traces paths originating from light sources, improving convergence for specific light paths.
+* **Environment Mapping:** Latitude-Longitude Environment Maps evaluated, and sampled using a luminance-based PDF, combined with MIS to reduce variance.
 
-## Tasks for Students
+### Physically Based Materials (BSDFs)
+* **Conductor BSDF (GGX Microfacet):** Both evaluation and sampling are proportional to the Normal Distribution Function (NDF).
+* **Diffuse, Mirror (Perfect Specular), Glass & Plastic (Phong) BSDFs.**
+* **Oren-Nayar BSDF:** Accurate diffuse simulation for rough opaque surfaces.
+* **Layered BSDF:** Supports complex multi-layer materials and implements **Beer's Law** for attenuation.
 
-Several functions and algorithms are left incomplete and require implementation. Look for comments such as:
+### Performance & Optimizations
+* **Binned SAH BVH:** Bounding Volume Hierarchy utilizing a Binned Surface Area Heuristic to optimally partition geometry.
+* **Tile-Based Multithreading:** Concurrent processing of image tiles across available CPU threads.
+* **Intel Open Image Denoise (OIDN):** Generation of custom Arbitrary Output Variables (AOVs) to feed the OIDN pipeline, achieving high-quality images at drastically reduced sample counts.
 
-```cpp
-// Add code here
-```
+---
 
-## Notes
+## Renders & Comparisons
 
-- Ensure your implementations are efficient and well-commented.
-- Test incremental changes using appropriate scenes.
+### Integrator Comparison
+Evaluating identical Cornell Box scenes across the three implemented light transport algorithms.
+
+| Path Tracing | Light Tracing | Instant Radiosity |
+|:---:|:---:|:---:|
+| ![Cornell Box PT](images/CornellBoxPT.png) | ![Cornell Box LT](images/CornellBoxLT.png) | ![Cornell Box IR](images/CornellBoxIR.png) |
+| *Standard path tracing.* | *Paths traced from light sources.* | *Halton-sampled Virtual Point Lights.* |
+
+### Variance Reduction via AI Denoising (Intel OIDN)
+Comparing raw outputs at 128 Samples Per Pixel (SPP) against 16 SPP outputs processed through Intel OIDN using custom AOV passes.
+
+| 128 SPP (Raw / Noisy) | 16 SPP (Denoised via OIDN) |
+|:---:|:---:|
+| ![Bathroom 128SPP](images/Bathroom128SPP.png) | ![Bathroom 16SPP Denoised](images/Bathroom16SPPDenoised.png) |
+| ![Kitchen 128SPP](images/Kitchen128SPP.png) | ![Kitchen 16SPP Denoised](images/Kitchen16SPPDenoised.png) |
+| ![Classroom 128SPP](images/Classroom128SPP.png) | ![Classroom 16SPP Denoised](images/Classroom16SPPDenoised.png) |
+| ![Sibenik 128SPP](images/Sibenik128SPP.png) | ![Sibenik 16SPP Denoised](images/Sibenik16SPPDenoised.png) |
+
+*(Note: Classroom and Sibenik scenes also evaluate Latitude-Longitude Environment Map lighting).*
+
+### Material Implementations
+
+**Layered BSDF Evaluation**
+![Car Scene](images/Car128SPP.png)
+*Car model rendered at 128 SPP testing the Layered BSDF implementation.*
+
+**BSDF Lineup & Environment Map**
+![Materials Scene](images/MaterialsScene128SPP.png)
+*Left to right: Demonstrating various implemented BSDFs (Oren-Nayar, Conductor, Plastic, Mirror, Glass) under an environment map sampled using a luminance-based PDF.*
