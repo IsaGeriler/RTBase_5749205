@@ -74,4 +74,4 @@ Comparing raw outputs at 128 Samples Per Pixel (SPP) against 16 SPP outputs proc
 
 **BSDF Lineup & Environment Map**
 ![Materials Scene](Images/MaterialsScene128SPP.png)
-*Left to right: Demonstrating various implemented BSDFs (Oren-Nayar, Conductor, Plastic, Mirror, Glass, Oren-Nayar) under an environment map sampled using a luminance-based PDF.*
+*Left to right: Demonstrating various implemented BSDFs (Oren-Nayar, Conductor, Plastic, Glass, Mirror, Oren-Nayar) under an environment map sampled using a luminance-based PDF.*
