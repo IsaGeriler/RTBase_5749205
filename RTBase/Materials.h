@@ -713,7 +713,7 @@ public:
 		float refractWi = 1.f - fresnelWi;
 
 		reflectedColour = reflectedColour * ((TrWo * etaWo * refractWo) + (TrWi * etaWi * refractWi));
-		return wi;
+		return shadingData.frame.toWorld(wi);
 	}
 
 	Colour evaluate(const ShadingData& shadingData, const Vec3& wi) {

@@ -17,16 +17,16 @@ int main(int argc, char* argv[]) {
 
 	// Initialize default parameters
 	//std::string sceneName = "Scenes/bathroom";
-	//std::string sceneName = "Scenes/car2";
+	std::string sceneName = "Scenes/car2";
 	//std::string sceneName = "Scenes/classroom";
 	//std::string sceneName = "Scenes/cornell-box";
 	//std::string sceneName = "Scenes/glass-of-water";
 	//std::string sceneName = "Scenes/kitchen";
 	//std::string sceneName = "Scenes/MaterialsScene";
-	std::string sceneName = "Scenes/Sibenik";
+	//std::string sceneName = "Scenes/Sibenik";
 	std::string filename = "GI.hdr";
-	unsigned int SPP = 8192;
-	//unsigned int SPP = 128;
+	//unsigned int SPP = 8192;
+	unsigned int SPP = 128;
 	//unsigned int SPP = 16;
 
 	if (argc > 1) {
@@ -127,7 +127,13 @@ int main(int argc, char* argv[]) {
 		}
 
 		if (SPP == rt.getSPP()) {
-			rt.saveHDR(filename);
+			// Save HDR
+			//rt.saveHDR(filename);
+
+			// Save LDR
+			size_t pos = filename.find_last_of('.');
+			std::string ldrFilename = filename.substr(0, pos) + ".png";
+			rt.savePNG(ldrFilename);
 			break;
 		}
 		canvas.present();
